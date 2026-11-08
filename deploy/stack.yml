@@ -1,0 +1,118 @@
+# Swarm stack for proba-llm-gateway. Do not `docker stack deploy` from this agent.
+# Hub (same overlay) reaches this service at http://gateway:3700. No published port.
+# This process calls proba-llm at http://llm:3600. The DeepSeek key stays on llm.
+#
+# Supported topology (local volume, not a shared store):
+#   - replicas: 1
+#   - exactly one node labeled proba.gateway=true
+#   - update order stop-first
+# A second replica or a reschedule onto another node does NOT see the run
+# outbox; a retried Idempotency-Key can re-enter the loop.
+version: "3.8"
+
+services:
+  gateway:
+    image: ${REGISTRY:-ghcr.io/smallseedlabs}/proba-llm-gateway:${VERSION:-latest}
+    networks:
+      - proba-network
+    read_only: true
+    tmpfs:
+      - /tmp
+    volumes:
+      - gateway_run_data:/app/data
+    working_dir: /app
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: "3700"
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      CALLER_ISSUERS: ${CALLER_ISSUERS:-proba-hub}
+      CALLER_SUBJECTS: ${CALLER_SUBJECTS:-hub}
+      HUB_SERVICE_PUBLIC_KEY_FILE: /run/secrets/hub_service_jwks
+      HUB_ASSERTION_PUBLIC_KEY_FILE: /run/secrets/hub_assertion_jwks
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://llm:3600}
+      LLM_ALLOWED_HOSTS: ${LLM_ALLOWED_HOSTS:-llm}
+      GATEWAY_LLM_PRIVATE_KEY_FILE: /run/secrets/gateway_llm_private_key
+      GATEWAY_LLM_KEY_ID: ${GATEWAY_LLM_KEY_ID:-gateway-llm-1}
+      LLM_TOKEN_ISSUER: ${LLM_TOKEN_ISSUER:-proba-gateway}
+      LLM_TOKEN_SUBJECT: ${LLM_TOKEN_SUBJECT:-gateway}
+      CONTEXT_BRIDGE_URL: ${CONTEXT_BRIDGE_URL:-http://context:3500}
+      CONTEXT_ALLOWED_HOSTS: ${CONTEXT_ALLOWED_HOSTS:-context}
+      CONTEXT_MAX_BUDGET_TOKENS: ${CONTEXT_MAX_BUDGET_TOKENS:-4000}
+      ADS_DOMAIN_URL: ${ADS_DOMAIN_URL:-}
+      ADS_DOMAIN_ALLOWED_HOSTS: ${ADS_DOMAIN_ALLOWED_HOSTS:-ads}
+      ADS_TOKEN_AUDIENCE: ${ADS_TOKEN_AUDIENCE:-proba-ads}
+      AUDIT_PUBLISHER: redis
+      AUDIT_STREAM: ${AUDIT_STREAM:-proba.audit.events}
+      REDIS_URL_FILE: /run/secrets/redis_url
+      AUDIT_CONTENT_ENABLED: "true"
+      AUDIT_CONTENT_MASK_PII: "true"
+      RUN_STORE_DIR: /app/data/runs
+    secrets:
+      - hub_service_jwks
+      - hub_assertion_jwks
+      - gateway_llm_private_key
+      - redis_url
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 90s
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('http').get('http://127.0.0.1:'+(process.env.PORT||3700)+'/ready',(r)=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    deploy:
+      mode: replicated
+      replicas: 1
+      endpoint_mode: vip
+      placement:
+        max_replicas_per_node: 1
+        constraints:
+          - node.labels.proba.gateway == true
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+        order: stop-first
+      rollback_config:
+        parallelism: 1
+        delay: 5s
+        order: stop-first
+      restart_policy:
+        condition: any
+        delay: 5s
+        window: 120s
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+
+networks:
+  proba-network:
+    name: ${PROBA_NETWORK:-proba-network}
+    external: true
+
+volumes:
+  gateway_run_data:
+
+secrets:
+  hub_service_jwks:
+    external: true
+  hub_assertion_jwks:
+    external: true
+  gateway_llm_private_key:
+    external: true
+  redis_url:
+    external: true
