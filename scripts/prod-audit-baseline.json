@@ -1,5 +1,5 @@
 {
-  "comment": "Production high+ GHSAs that need major upgrades (fastify 5, protocol/zod 4). New IDs fail CI. Removing a listed ID from npm audit also fails until this file is tightened. Protocol v0.6.0 is not forced in this PR.",
+  "comment": "Production high+ GHSAs that need major upgrades (fastify 5, protocol/zod 4). This list is a documented baseline, NOT a security clearance. Later remediation is required. Do not broaden this allowlist. New IDs fail CI. Removing a listed ID from npm audit also fails until this file is tightened. Protocol v0.6.0 is not forced in this PR.",
   "github_advisory_ids": [
     "GHSA-444r-cwp2-x5xf",
     "GHSA-4mh8-r7rc-xpvc",

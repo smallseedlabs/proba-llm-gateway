@@ -299,6 +299,8 @@ export async function runPreflight(
       if (usage.hasMonetaryCap()) usage.observePricing(await llmPricing(deps.llm));
       usage.assertCanStartIteration();
       usage.assertCanCallLlm();
+    } else if (phase === 'evaluate') {
+      // Context-backed evaluator: no LLM reservation and no tool reservation.
     } else usage.assertCanCallTool();
   } catch (err) {
     runEligible = false;

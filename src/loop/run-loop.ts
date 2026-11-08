@@ -9,6 +9,8 @@ import {
 } from '../errors.js';
 import type { AdsDomainPort } from '../ports/ads.js';
 import type { ResearchArtifactStore } from '../ports/research.js';
+import type { AnalyticsDecisionStore } from '../analytics/store.js';
+import { runAnalyticsReview } from './analytics-review.js';
 import { verbByName } from '../limbs/catalog.js';
 import { applyResearchResume, isResearchAcceptPending } from '../research/acceptance.js';
 import { lookupCurrentArtifact } from '../research/gather.js';
@@ -52,6 +54,7 @@ export interface LoopBodyDeps {
   tools: LimbExecutor;
   ads: AdsDomainPort;
   researchStore: ResearchArtifactStore;
+  analyticsStore: AnalyticsDecisionStore;
   persist: (record: RunRecord) => Promise<void>;
   relay: (record: RunRecord) => Promise<void>;
 }
@@ -83,6 +86,10 @@ export async function runBoundedLoop(
       throw err;
     }
     if (record.pendingApproval && record.state === 'awaiting_approval' && record.snapshot) return record.snapshot;
+  }
+
+  if (request.stepType === 'review_performance') {
+    return runAnalyticsReview(deps, record, request, cancellation, usage);
   }
 
   const hardCap = Math.max(1, deps.config.limits.maxIterations) + 1;

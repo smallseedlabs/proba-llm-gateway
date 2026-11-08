@@ -13,6 +13,7 @@ import { testConfig } from '../testing/config.js';
 import { RecordingAdsDomain, ScriptedContextPort, ScriptedLlmClient } from '../testing/doubles.js';
 import { testCaller, testRunRequest, testToolTurn, testTurn } from '../testing/fixtures.js';
 import { MemoryResearchStore } from '../research/memory-store.js';
+import { MemoryAnalyticsStore } from '../analytics/memory-store.js';
 import { FileResearchStore } from '../research/file-store.js';
 import { UnconfiguredResearchProvider } from '../research/unconfigured.js';
 import {
@@ -63,6 +64,7 @@ function loop(input: {
       tools: new DomainLimbExecutor(ads, { provider: research, store: researchStore, clock }),
       ads,
       researchStore,
+      analyticsStore: new MemoryAnalyticsStore('test'),
     }),
   };
 }
