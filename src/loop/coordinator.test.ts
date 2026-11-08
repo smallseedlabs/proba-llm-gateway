@@ -23,6 +23,7 @@ import type { ContextPort } from '../ports/context.js';
 import type { LimbExecutor } from '../ports/limbs.js';
 import type { AdsDomainPort } from '../ports/ads.js';
 import { MemoryResearchStore } from '../research/memory-store.js';
+import { MemoryAnalyticsStore } from '../analytics/memory-store.js';
 import { seedAcceptedResearch, TEST_LANDING_URL, userLanding } from '../testing/research.js';
 import type { ResearchArtifactStore, ResearchProviderPort } from '../ports/research.js';
 import { SourcedResearchProvider } from '../testing/research.js';
@@ -62,6 +63,7 @@ function coordinator(input: {
       tools: input.tools ?? new DomainLimbExecutor(ads, { provider: research, store: researchStore, clock }),
       ads,
       researchStore,
+      analyticsStore: new MemoryAnalyticsStore('test'),
     }),
   };
 }
@@ -473,7 +475,7 @@ describe('loop coordinator', () => {
     const { coordinator: loop } = coordinator({ llm, ads });
     const snapshot = await loop.start(testRunRequest({ stepType: 'review_performance' }), testCaller());
     expect(snapshot.status).toBe('completed');
-    expect(llm.completeCalls).toBe(1);
+    expect(llm.completeCalls).toBe(0);
     expect(ads.preflightCalls).toBe(0);
     expect(ads.calls).toHaveLength(0);
   });

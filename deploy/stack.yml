@@ -50,6 +50,7 @@ services:
       RUN_STORE_DIR: /app/data/runs
       RESEARCH_STORE_DIR: /app/data/research
       RESEARCH_HTTP_FETCH: "false"
+      ANALYTICS_STORE_DIR: /app/data/analytics
     secrets:
       - hub_service_jwks
       - hub_assertion_jwks

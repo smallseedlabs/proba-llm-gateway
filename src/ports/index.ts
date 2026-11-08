@@ -17,3 +17,4 @@ export { runStoreKey } from './run-store.js';
 export type { HttpTransport } from './transport.js';
 export type { AdsDomainAction, AdsDomainPort, AdsDomainResult } from './ads.js';
 export type { ResearchArtifactStore, ResearchProviderPort, ResearchQuery } from './research.js';
+export type { AnalyticsDecisionStore } from '../analytics/store.js';

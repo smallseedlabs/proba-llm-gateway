@@ -30,6 +30,17 @@ describe('prerequisite graph', () => {
     expect(order.indexOf('ads.service')).toBeLessThan(order.indexOf('llm.quota'));
   });
 
+  it('evaluate phase needs context.ready and never llm.quota', () => {
+    const manifest = operationManifest({
+      phase: 'evaluate',
+      intent: { kind: 'read_or_plan', requiresAds: false, requiresPage: false, spendClass: 'none' },
+    });
+    expect(manifest.requires).toContain('context.ready');
+    expect(manifest.requires).not.toContain('llm.quota');
+    expect(manifest.requires).not.toContain('ads.billing');
+    expect(manifest.spendClass).toBe('none');
+  });
+
   it('requires research.accepted only at mutate for ads.create_campaign', () => {
     const brain = operationManifest({
       phase: 'brain',

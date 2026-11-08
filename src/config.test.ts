@@ -17,6 +17,14 @@ describe('loadConfig', () => {
     expect(loadConfig({ NODE_ENV: 'test', RESEARCH_HTTP_FETCH: 'true' }).research.httpFetchEnabled).toBe(true);
   });
 
+  it('defaults analytics evaluator gates without inventing a spend ceiling', () => {
+    const cfg = loadConfig({ NODE_ENV: 'test' });
+    expect(cfg.analytics.maxAgeMs).toBe(6 * 60 * 60 * 1000);
+    expect(cfg.analytics.minWindowCoverage).toBe(0.5);
+    expect(cfg.analytics.maxProposalDailyBudget).toBeNull();
+    expect(cfg.analytics.cooldownMs).toBeGreaterThan(0);
+  });
+
   it('defaults unknown quota to allow_with_run_budget and rejects an invalid policy', () => {
     expect(loadConfig({ NODE_ENV: 'test' }).llm.quotaUnknownPolicy).toBe('allow_with_run_budget');
     expect(loadConfig({ NODE_ENV: 'test', LLM_QUOTA_UNKNOWN_POLICY: 'refuse' }).llm.quotaUnknownPolicy).toBe('refuse');

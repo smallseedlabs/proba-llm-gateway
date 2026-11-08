@@ -79,6 +79,13 @@ Process: Node 20, Fastify, port **3700**. Restart required for env. Production r
 | `RESEARCH_FETCH_TIMEOUT_MS` | fetch timeout | `5000` (100–30000) | no | int | research HTTP | abort |
 | `RESEARCH_FETCH_MAX_BYTES` | untrusted body cap | `262144` | no | int | research HTTP | `untrusted_content` |
 | `RESEARCH_STORE_DIR` | versioned review artifacts | `data/research` (empty in test) | prod | path | process | single-replica files, not Hub DB |
+| `ANALYTICS_MAX_AGE_MS` | Context analytics freshness | `21600000` (6h) | no | int | evaluate | stale → `no_action`; unparseable asOf is unknown, not fresh |
+| `ANALYTICS_MIN_IMPRESSIONS` / `MIN_OBSERVATIONS` | sample floors | `100` / `12` | no | int | evaluate | unknown is not a zero sample |
+| `ANALYTICS_MIN_WINDOW_COVERAGE` | hourly-bucket fraction | `0.5` | no | 0–1 | evaluate | unknown coverage not assumed complete |
+| `ANALYTICS_COOLDOWN_MS` | per-campaign decision cooldown | `21600000` (6h) | no | int | evaluate | durable file; not Hub cadence |
+| `ANALYTICS_MAX_PROPOSAL_DAILY_BUDGET` | optional dry-run cap ceiling | **UNSET** (`null`) | no | positive number | evaluate | not a spend grant |
+| `ANALYTICS_MAX_PROPOSAL_DECREASE_PCT` | max cap decrease fraction | `0.5` | no | 0–1 | evaluate | increases blocked |
+| `ANALYTICS_STORE_DIR` | per-campaign decision files | `data/analytics` (empty in test) | prod | path | process | single-replica; in-memory refused in production |
 | `GATEWAY_MAX_ITERATIONS` | loop | `8` (1–64) | no | int | run | exhausted |
 | `GATEWAY_MAX_LLM_CALLS` | paid completes | `8` (1–64) | no | int | run | exhausted |
 | `GATEWAY_MAX_TOOL_CALLS` | tools | `16` (1–256) | no | int | run | exhausted |
@@ -161,7 +168,7 @@ Gateway requires `goalId` + `threadId` + act-as (non-test) and a successful `/re
 
 ## 9. CURRENT VERIFIED — limitations (constraints, not wishes)
 
-1. **Gateway CI** (`.github/workflows/ci.yml` + `security.yml`): lint, typecheck, tests with required research-guard names, build, Docker image, compose loopback/`RESEARCH_HTTP_FETCH=false`, gitleaks, CodeQL, production npm audit (high+ vs documented fastify 4 / zod 3 baseline). CI does not enable live crawl or paid providers.
+1. **Gateway CI** (`.github/workflows/ci.yml` + `security.yml`): lint, typecheck, tests with required research-guard names, build, Docker image, compose loopback/`RESEARCH_HTTP_FETCH=false`, gitleaks, CodeQL, production npm audit (high+ vs documented fastify 4 / zod 3 baseline). **That baseline is not a security clearance**; later fastify 5 / protocol zod 4 remediation is required. Do not broaden `scripts/prod-audit-baseline.json`. CI does not enable live crawl or paid providers.
 2. **Hub and LLM publication refusals** from earlier tasks remain final; this run does not retry them. Hub `gateway_runs` durability may exist on a Hub branch that is not merged from here.
 3. **`GET /v1/quota` and `GET /v1/pricing` do not exist on proba-llm.** Gateway records `unknown`. Official DeepSeek list prices (below) are **not** loaded into `PRICE_*`.
 4. **Paid path is opt-in** (`GATEWAY_URL`). Default Hub is mock brain. Enabling gateway with keys **can** spend at the vendor.
@@ -169,7 +176,7 @@ Gateway requires `goalId` + `threadId` + act-as (non-test) and a successful `/re
 6. **Context is a hard prerequisite** for gateway brain (this PR). Act-as is Hub-minted; gateway does not mint it.
 7. **Ads domain / provider bots are not implemented** in gateway. `ADS_DOMAIN_URL` empty fails closed. No Reddit/Microsoft/Google/Meta credentials here.
 7b. **Research review is a gateway slice only.** Default `RESEARCH_HTTP_FETCH=false` (unconfigured, honest failure). `ads.create_campaign` cannot use a model-invented URL or skip an accepted current artifact. Hub/web/protocol UX is not in this repo (`docs/RESEARCH_REVIEW_CONTRACT.md`). No default landing URL.
-8. **Analytics metrics/schema are incomplete** for live campaigns (audit stubs; Context analytics source can gap).
+8. **Analytics metrics/schema are incomplete** for live campaigns (audit stubs; Context analytics source can gap). Gateway `review_performance` now **evaluates** in-scope Context items (unknown ≠ 0) and emits audited report/no_action/blocked/dry-run proposal. It does not execute Ads, pay for LLM, or grant spend. Hub cadence/coalescing is documented in `docs/ANALYTICS_EVALUATOR.md` and is **not implemented in Hub here**.
 9. **Approval persistence:** gateway stores pending approval on the run record; Hub owns the user ask. Cross-service resume bindings were a Hub task; treat as **implemented in Hub branch / untested end-to-end from this gateway PR**.
 10. **Audit in gateway is producer + local replay**, not ClickHouse verification.
 11. **No fictional real balance.** Unknown quota/cost/pricing/ad funds stay unknown.
