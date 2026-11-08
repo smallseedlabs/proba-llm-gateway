@@ -9,6 +9,7 @@ import type { CostEstimate, TurnResponse } from '../types/llm.js';
 import type { UsageTotals } from '../types/usage.js';
 import type { RunBudget } from '../types/run.js';
 import type { LimitsConfig } from '../types/config.js';
+import type { LlmPricingClaim } from '../types/preflight.js';
 
 export interface UsageLimits {
   maxIterations: number;
@@ -24,6 +25,9 @@ export interface UsageLimits {
 
 export interface UsageLedger {
   snapshot(): UsageTotals;
+  hasMonetaryCap(): boolean;
+  observePricing(claim: LlmPricingClaim): void;
+  completionTokenCap(): number;
   /**
    * Throws if another loop iteration cannot start. Uses pre-increment
    * semantics so maxIterations=1 can still complete its first LLM turn.

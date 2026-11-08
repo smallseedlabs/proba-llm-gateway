@@ -6,7 +6,7 @@
 import { LlmClientError, type LlmClient, type LlmCompleteOptions } from '../ports/llm-client.js';
 import type { LlmServiceTokenSigner } from '../ports/token-signer.js';
 import { completeRequestSchema, turnResponseSchema, type CompleteRequest, type TurnResponse } from '../types/llm.js';
-import type { LlmQuotaClaim } from '../types/preflight.js';
+import type { LlmPricingClaim, LlmQuotaClaim } from '../types/preflight.js';
 import { assertAllowedBaseUrl, trimBaseUrl } from '../http/allowlist.js';
 
 export interface HttpLlmClientOptions {
@@ -116,6 +116,32 @@ export class HttpLlmClient implements LlmClient {
       };
     } catch (err) {
       return { kind: 'unavailable', reason: err instanceof Error ? err.message : 'proba-llm quota unreachable' };
+    }
+  }
+
+  async pricing(): Promise<LlmPricingClaim> {
+    try {
+      const response = await this.fetchImpl(`${this.baseUrl}/v1/pricing`);
+      if (response.status === 404) {
+        return { kind: 'unknown', reason: 'proba-llm has no pricing endpoint; /ready is not a unit price' };
+      }
+      if (!response.ok) {
+        return { kind: 'unavailable', reason: `proba-llm /v1/pricing returned HTTP ${response.status}` };
+      }
+      const body = (await response.json().catch(() => undefined)) as {
+        promptUsdPerMillion?: unknown;
+        completionUsdPerMillion?: unknown;
+        version?: unknown;
+      } | undefined;
+      const prompt = body?.promptUsdPerMillion;
+      const completion = body?.completionUsdPerMillion;
+      const version = body?.version;
+      if (typeof prompt !== 'number' || !(prompt > 0) || typeof completion !== 'number' || !(completion > 0) || typeof version !== 'string' || version.trim() === '') {
+        return { kind: 'unknown', reason: 'proba-llm pricing body did not include authoritative positive unit rates' };
+      }
+      return { kind: 'verified', promptUsdPerMillion: prompt, completionUsdPerMillion: completion, version };
+    } catch (err) {
+      return { kind: 'unavailable', reason: err instanceof Error ? err.message : 'proba-llm pricing unreachable' };
     }
   }
 }

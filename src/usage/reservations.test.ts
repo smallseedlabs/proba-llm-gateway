@@ -1,8 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { BudgetExhaustedError } from '../errors.js';
-import { contextBudgetForIteration, RunUsageLedger } from './reservations.js';
+import { contextBudgetForIteration, conservativeNextCallCostUsd, observedSpendUsd, RunUsageLedger } from './reservations.js';
 import type { TurnResponse } from '../types/llm.js';
 import type { UsageLimits } from '../ports/usage.js';
+import type { LlmPricingClaim } from '../types/preflight.js';
+
+const verifiedPricing = (overlay: Partial<Extract<LlmPricingClaim, { kind: 'verified' }>> = {}): LlmPricingClaim => ({
+  kind: 'verified',
+  promptUsdPerMillion: 0.15,
+  completionUsdPerMillion: 0.6,
+  version: 'test-v1',
+  ...overlay,
+});
 
 const limits = (overlay: Partial<UsageLimits> = {}): UsageLimits => ({
   maxIterations: 8,
@@ -28,12 +37,34 @@ const turn = (cost: TurnResponse['cost'], prompt = 100, completion = 50): TurnRe
 });
 
 describe('usage reservations', () => {
-  it('does not treat unknown cost as zero when a USD ceiling is set', () => {
+  it('refuses the first paid LLM call when a USD ceiling is set and pricing is unknown', () => {
     const ledger = new RunUsageLedger(limits({ maxCostUsd: 1 }));
-    expect(() => ledger.assertCanCallLlm()).not.toThrow();
-    ledger.recordLlmTurn(turn({ estimate: 'unknown' }));
+    expect(observedSpendUsd(ledger.snapshot()).kind).toBe('zero');
     expect(() => ledger.assertCanCallLlm()).toThrow(BudgetExhaustedError);
-    expect(() => ledger.assertCanCallLlm()).toThrow(/unknown/);
+    expect(() => ledger.assertCanCallLlm()).toThrow(/unknown unit prices|pricing/);
+  });
+
+  it('allows a first call inside a USD ceiling only when a conservative bound fits remaining room', () => {
+    const ledger = new RunUsageLedger(limits({ maxCostUsd: 1 }));
+    ledger.observePricing(verifiedPricing());
+    expect(() => ledger.assertCanCallLlm()).not.toThrow();
+    ledger.recordLlmTurn(turn({ estimate: 0.002, currency: 'USD', pricingVersion: 'test-v1' }));
+    expect(() => ledger.assertCanCallLlm()).not.toThrow();
+  });
+
+  it('blocks when remaining room is below the conservative next-call bound', () => {
+    const ledger = new RunUsageLedger(limits({ maxCostUsd: 0.001 }));
+    ledger.observePricing(verifiedPricing({ promptUsdPerMillion: 1000, completionUsdPerMillion: 1000 }));
+    const bound = conservativeNextCallCostUsd(limits({ maxCostUsd: 0.001 }), ledger.snapshot(), verifiedPricing({ promptUsdPerMillion: 1000, completionUsdPerMillion: 1000 }));
+    expect(bound.kind).toBe('numeric');
+    expect(() => ledger.assertCanCallLlm()).toThrow(/exceeds remaining USD ceiling/);
+  });
+
+  it('blocks further calls after unknown spend even when unit prices are known', () => {
+    const ledger = new RunUsageLedger(limits({ maxCostUsd: 1 }));
+    ledger.observePricing(verifiedPricing());
+    ledger.recordLlmTurn(turn({ estimate: 'unknown' }));
+    expect(() => ledger.assertCanCallLlm()).toThrow(/prior LLM cost is unknown/);
   });
 
   it('allows the first LLM call when no USD ceiling is configured even if cost is unknown', () => {
@@ -102,6 +133,7 @@ describe('usage reservations', () => {
 
   it('counts a failed dispatch toward llmCalls without treating unknown cost as zero', () => {
     const ledger = new RunUsageLedger(limits({ maxLlmCalls: 2, maxCostUsd: 1 }));
+    ledger.observePricing(verifiedPricing());
     ledger.recordLlmDispatchFailure();
     expect(ledger.snapshot().llmCalls).toBe(1);
     expect(ledger.snapshot().cost).toEqual({ estimate: 'unknown' });

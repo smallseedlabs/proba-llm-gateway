@@ -5,7 +5,7 @@
  * provider every iteration. LLM/user/tool output cannot redefine this policy.
  */
 
-import { PreflightBlockedError } from '../errors.js';
+import { BudgetExhaustedError, PreflightBlockedError } from '../errors.js';
 import { VERB_CATALOG } from '../limbs/catalog.js';
 import type { AdsDomainPort } from '../ports/ads.js';
 import type { ContextPort } from '../ports/context.js';
@@ -18,6 +18,7 @@ import type { HubRunRequest } from '../types/run.js';
 import type {
   AdsPreflightReport,
   CapabilityNeed,
+  LlmPricingClaim,
   LlmQuotaClaim,
   OperationIntent,
   PreflightDecision,
@@ -140,6 +141,20 @@ function mutateIntent(mutate: { verb: string; args: Record<string, unknown> }): 
     mappingRequired: verb !== 'ads.create_campaign',
     spendClass,
   };
+}
+
+async function llmPricing(llm: LlmClient): Promise<LlmPricingClaim> {
+  if (typeof llm.pricing !== 'function') {
+    return {
+      kind: 'unknown',
+      reason: 'proba-llm does not expose authoritative unit prices; gateway does not invent rates',
+    };
+  }
+  try {
+    return await llm.pricing();
+  } catch (err) {
+    return { kind: 'unavailable', reason: err instanceof Error ? err.message : 'LLM pricing probe failed' };
+  }
 }
 
 async function llmQuota(llm: LlmClient): Promise<LlmQuotaClaim> {
@@ -270,14 +285,17 @@ export async function runPreflight(
 
   let runEligible = true;
   let runMessage: string | undefined;
+  let runBudgetState: CapabilityNeed['state'] = 'insufficient';
   try {
     if (phase === 'brain') {
+      if (usage.hasMonetaryCap()) usage.observePricing(await llmPricing(deps.llm));
       usage.assertCanStartIteration();
       usage.assertCanCallLlm();
     } else usage.assertCanCallTool();
   } catch (err) {
     runEligible = false;
     runMessage = err instanceof Error ? err.message : 'run budget exhausted';
+    runBudgetState = err instanceof BudgetExhaustedError ? err.budgetState : 'insufficient';
   }
   const runBudget = { kind: 'local_run_budget' as const, eligible: runEligible, message: runMessage };
 
@@ -397,7 +415,7 @@ export async function runPreflight(
         needs.push({
           type: 'capability',
           capability: 'run.budget',
-          state: 'insufficient',
+          state: runBudgetState,
           message: runMessage ?? 'Proba run token/cost budget is exhausted',
         });
         remember(id, 'blocked', runMessage ?? 'run budget exhausted', false);

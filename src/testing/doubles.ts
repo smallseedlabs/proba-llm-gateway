@@ -9,7 +9,7 @@ import { ContextClientError, type ContextBuildOptions, type ContextPort } from '
 import type { LimbCall, LimbExecutionContext, LimbExecutor, LimbResult } from '../ports/limbs.js';
 import { LlmClientError, type LlmClient, type LlmCompleteOptions } from '../ports/llm-client.js';
 import type { AdsDomainAction, AdsDomainPort, AdsDomainResult } from '../ports/ads.js';
-import type { AdsBillingClaim, AdsPreflightQuery, AdsPreflightReport, LlmQuotaClaim } from '../types/preflight.js';
+import type { AdsBillingClaim, AdsPreflightQuery, AdsPreflightReport, LlmPricingClaim, LlmQuotaClaim } from '../types/preflight.js';
 import type { CompleteRequest, TurnResponse } from '../types/llm.js';
 import type { ContextPacket, ContextRequest } from '../protocol.js';
 import { testContextPacket } from './fixtures.js';
@@ -36,6 +36,7 @@ export class ScriptedLlmClient implements LlmClient {
   requests: CompleteRequest[] = [];
   hang?: () => Promise<void>;
   quotaClaim?: LlmQuotaClaim | (() => Promise<LlmQuotaClaim>);
+  pricingClaim?: LlmPricingClaim;
 
   constructor(private readonly turns: TurnResponse[]) {}
 
@@ -44,6 +45,11 @@ export class ScriptedLlmClient implements LlmClient {
     if (typeof this.quotaClaim === 'function') return this.quotaClaim();
     if (this.quotaClaim) return this.quotaClaim;
     return { kind: 'unknown', reason: 'proba-llm has no quota endpoint; /ready is not a credit balance' };
+  }
+
+  async pricing(): Promise<LlmPricingClaim> {
+    if (this.pricingClaim) return this.pricingClaim;
+    return { kind: 'unknown', reason: 'proba-llm has no pricing endpoint; /ready is not a unit price' };
   }
 
   async complete(request: CompleteRequest, options: LlmCompleteOptions): Promise<TurnResponse> {

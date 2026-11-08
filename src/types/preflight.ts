@@ -101,6 +101,20 @@ export const adsPreflightReportSchema = z
   .strict();
 export type AdsPreflightReport = z.infer<typeof adsPreflightReportSchema>;
 
+export const llmPricingClaimSchema = z.discriminatedUnion('kind', [
+  z
+    .object({
+      kind: z.literal('verified'),
+      promptUsdPerMillion: z.number().positive(),
+      completionUsdPerMillion: z.number().positive(),
+      version: z.string().min(1),
+    })
+    .strict(),
+  z.object({ kind: z.literal('unknown'), reason: z.string().min(1) }).strict(),
+  z.object({ kind: z.literal('unavailable'), reason: z.string().min(1) }).strict(),
+]);
+export type LlmPricingClaim = z.infer<typeof llmPricingClaimSchema>;
+
 export const llmQuotaClaimSchema = z.discriminatedUnion('kind', [
   z
     .object({

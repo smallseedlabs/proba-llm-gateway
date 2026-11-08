@@ -180,8 +180,25 @@ describe('loop coordinator', () => {
     expect(done.error?.message).toMatch(/ADS_DOMAIN_URL|not ready|not configured/);
   });
 
-  it('refuses a second paid LLM call after unknown cost when a USD ceiling is set', async () => {
-    const idempotencyKey = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+  it('blocks the first paid LLM call when a USD ceiling is set and pricing is unknown', async () => {
+    const llm = new ScriptedLlmClient([testTurn()]);
+    const { coordinator: loop } = coordinator({
+      llm,
+      config: testConfig({ limits: { ...testConfig().limits, maxCostUsd: 1 } }),
+    });
+    const req = testRunRequest({ idempotencyKey: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd' });
+    const snapshot = await loop.start(req, testCaller());
+    expect(snapshot.status).toBe('blocked');
+    expect(snapshot.error?.code).toBe('preflight_blocked');
+    expect(snapshot.needs?.some((n) => (n as { capability?: string }).capability === 'run.budget')).toBe(true);
+    expect(llm.completeCalls).toBe(0);
+    const again = await loop.start(req, testCaller());
+    expect(again.status).toBe('blocked');
+    expect(llm.completeCalls).toBe(0);
+  });
+
+  it('does not bypass a USD ceiling on resume after unknown spend', async () => {
+    const idempotencyKey = 'dddddddd-dddd-4ddd-8dde-dddddddddddd';
     const llmUnknown = new ScriptedLlmClient([
       {
         ...testToolTurn('page.attach_user_page', { url: 'https://example.com/x' }),
@@ -189,16 +206,54 @@ describe('loop coordinator', () => {
       },
       testTurn(),
     ]);
+    llmUnknown.pricingClaim = {
+      kind: 'verified',
+      promptUsdPerMillion: 0.15,
+      completionUsdPerMillion: 0.6,
+      version: 'test-v1',
+    };
     const again = coordinator({ llm: llmUnknown, config: testConfig({ limits: { ...testConfig().limits, maxCostUsd: 1 } }) });
     const first = await again.coordinator.start(testRunRequest({ idempotencyKey }), testCaller());
+    expect(first.status).toBe('awaiting_approval');
+    expect(llmUnknown.completeCalls).toBe(1);
     const askId = (first.needs?.[0] as { askId: string }).askId;
     const done = await again.coordinator.start(
       testRunRequest({ idempotencyKey, resume: { askId, choice: 'approve' } }),
       testCaller()
     );
-    expect(done.status).toBe('failed');
-    expect(done.error?.code).toBe('budget_exhausted');
+    expect(done.status).toBe('blocked');
+    expect(done.needs?.some((n) => (n as { capability?: string }).capability === 'run.budget')).toBe(true);
     expect(llmUnknown.completeCalls).toBe(1);
+  });
+
+  it('allows known-price calls only while the conservative bound fits remaining room', async () => {
+    const llm = new ScriptedLlmClient([testTurn({ message: { role: 'assistant', content: 'ok' } })]);
+    llm.pricingClaim = {
+      kind: 'verified',
+      promptUsdPerMillion: 0.15,
+      completionUsdPerMillion: 0.6,
+      version: 'test-v1',
+    };
+    const ok = coordinator({ llm, config: testConfig({ limits: { ...testConfig().limits, maxCostUsd: 1 } }) });
+    const allowed = await ok.coordinator.start(testRunRequest(), testCaller());
+    expect(allowed.status).toBe('completed');
+    expect(llm.completeCalls).toBe(1);
+
+    const tight = new ScriptedLlmClient([testTurn()]);
+    tight.pricingClaim = {
+      kind: 'verified',
+      promptUsdPerMillion: 1000,
+      completionUsdPerMillion: 1000,
+      version: 'test-v1',
+    };
+    const denied = coordinator({
+      llm: tight,
+      config: testConfig({ limits: { ...testConfig().limits, maxCostUsd: 0.001 } }),
+    });
+    const blocked = await denied.coordinator.start(testRunRequest(), testCaller());
+    expect(blocked.status).toBe('failed');
+    expect(blocked.error?.code).toBe('budget_exhausted');
+    expect(tight.completeCalls).toBe(0);
   });
 
   it('does not redispatch an ambiguous LLM turn', async () => {

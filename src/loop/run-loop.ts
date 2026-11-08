@@ -93,7 +93,7 @@ export async function runBoundedLoop(
     await deps.persist(record);
     if (!preflight.allowed) {
       const budget = preflight.needs.find((need) => need.capability === 'run.budget');
-      if (budget) throw new BudgetExhaustedError(budget.message);
+      if (budget?.state === 'insufficient') throw new BudgetExhaustedError(budget.message);
       return blockedSnapshot(deps, record, preflight.needs);
     }
 
@@ -199,12 +199,7 @@ async function callLlm(
     throw new AmbiguousOutcomeError('LLM turn was dispatched and is not safe to retry');
   }
 
-  const remainingCompletion =
-    deps.config.limits.maxCompletionTokens === null
-      ? deps.config.limits.responseTokenReserve
-      : Math.max(1, deps.config.limits.maxCompletionTokens - usage.snapshot().completionTokens);
-  const reserve = deps.config.limits.responseTokenReserve || remainingCompletion;
-  const maxTokens = Math.max(1, Math.min(reserve, remainingCompletion));
+  const maxTokens = usage.completionTokenCap();
 
   const llmRequest: CompleteRequest = {
     traceId: request.traceId,

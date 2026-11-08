@@ -267,4 +267,59 @@ describe('preflight graph engine', () => {
     expect(refused.needs.some((need) => need.capability === 'llm.quota' && need.state === 'unknown')).toBe(true);
     expect(llm.completeCalls).toBe(0);
   });
+
+  it('blocks a USD ceiling before any paid call when pricing is unknown, and allows only a fitting bound', async () => {
+    const ads = new RecordingAdsDomain();
+    const llm = new ScriptedLlmClient([testTurn()]);
+    const clock = new AdjustableClock();
+    const signal = new AbortController().signal;
+    const request = testRunRequest({ stepType: 'interpret_message' });
+    const capped = testConfig({ limits: { ...testConfig().limits, maxCostUsd: 1 } });
+    const usageFor = (config: ReturnType<typeof testConfig>) =>
+      new RunUsageLedger({ ...config.limits, contextBudgetTokens: config.context.maxBudgetTokens });
+
+    const unknownPricing = await runPreflight(
+      { config: capped, clock, ads, llm, context: new ScriptedContextPort() },
+      request,
+      recordOf(request),
+      usageFor(capped),
+      signal,
+      { phase: 'brain' }
+    );
+    expect(unknownPricing.allowed).toBe(false);
+    expect(unknownPricing.needs.some((need) => need.capability === 'run.budget' && need.state === 'unknown')).toBe(true);
+    expect(llm.completeCalls).toBe(0);
+
+    llm.pricingClaim = {
+      kind: 'verified',
+      promptUsdPerMillion: 0.15,
+      completionUsdPerMillion: 0.6,
+      version: 'test-v1',
+    };
+    const fitting = await runPreflight(
+      { config: capped, clock, ads, llm, context: new ScriptedContextPort() },
+      request,
+      recordOf(request),
+      usageFor(capped),
+      signal,
+      { phase: 'brain' }
+    );
+    expect(fitting.allowed).toBe(true);
+    expect(llm.completeCalls).toBe(0);
+
+    const tight = testConfig({ limits: { ...testConfig().limits, maxCostUsd: 0.000001 } });
+    const insufficient = await runPreflight(
+      { config: tight, clock, ads, llm, context: new ScriptedContextPort() },
+      request,
+      recordOf(request),
+      usageFor(tight),
+      signal,
+      { phase: 'brain' }
+    );
+    expect(insufficient.allowed).toBe(false);
+    expect(insufficient.needs.some((need) => need.capability === 'run.budget' && need.state === 'insufficient')).toBe(
+      true
+    );
+    expect(llm.completeCalls).toBe(0);
+  });
 });

@@ -8,7 +8,7 @@
  */
 
 import type { CompleteRequest, TurnResponse } from '../types/llm.js';
-import type { LlmQuotaClaim } from '../types/preflight.js';
+import type { LlmPricingClaim, LlmQuotaClaim } from '../types/preflight.js';
 
 export type LlmClientErrorCode =
   | 'invalid_request'
@@ -51,5 +51,10 @@ export interface LlmClient {
    * `unknown`, not a verified zero. Must not use /ready as a credit balance.
    */
   quota?(): Promise<LlmQuotaClaim>;
+  /**
+   * Authoritative unit prices for a conservative next-call bound. Optional.
+   * Absence or 404 is `unknown`, not a $0 rate. Must not use /ready as pricing.
+   */
+  pricing?(): Promise<LlmPricingClaim>;
   close?(): Promise<void>;
 }
