@@ -28,6 +28,33 @@ export class HttpContextClient implements ContextPort {
     this.fetchImpl = options.fetchImpl ?? fetch;
   }
 
+  async ping(): Promise<void> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    try {
+      for (const path of ['/ready', '/health'] as const) {
+        try {
+          const response = await this.fetchImpl(`${this.baseUrl}${path}`, { method: 'GET', signal: controller.signal });
+          if (response.ok) return;
+        } catch (err) {
+          if (controller.signal.aborted) {
+            throw new ContextClientError('timeout', 'context readiness probe timed out');
+          }
+          if (path === '/health') {
+            throw new ContextClientError(
+              'unreachable',
+              err instanceof Error ? err.message : 'context bridge readiness probe failed',
+              err
+            );
+          }
+        }
+      }
+      throw new ContextClientError('unreachable', 'context bridge /ready and /health were not ok');
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   async build(request: ContextRequest, options: ContextBuildOptions): Promise<ContextPacket> {
     if (!options.assertion) {
       throw new ContextClientError('assertion_invalid', 'act-as assertion is required for context build');

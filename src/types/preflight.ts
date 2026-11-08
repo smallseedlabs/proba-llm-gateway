@@ -138,6 +138,7 @@ export const capabilityNeedSchema = z
       'ads.billing',
       'llm.service',
       'llm.quota',
+      'context.ready',
       'run.budget',
     ]),
     state: capabilityStateSchema,
@@ -177,6 +178,7 @@ export const prerequisiteIdSchema = z.enum([
   'ads.blueprint',
   'ads.billing',
   'llm.quota',
+  'context.ready',
 ]);
 export type PrerequisiteId = z.infer<typeof prerequisiteIdSchema>;
 

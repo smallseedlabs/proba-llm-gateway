@@ -88,6 +88,9 @@ describe('isolated HTTP integration smoke', () => {
       return { status: 200, body: hasToolResult ? finalTurn('campaign is live') : toolTurn() };
     });
     contextServer = await listenJsonServer(async ({ method, url, headers, body }) => {
+      if (method === 'GET' && (url === '/ready' || url === '/health')) {
+        return { status: 200, body: { status: 'ok', service: 'context' } };
+      }
       if (method !== 'POST' || url !== '/v1/context/build') return { status: 404, body: { error: 'not_found' } };
       contextCalls.push({ authorization: headers.authorization, body });
       const req = body as { traceId: string; workspaceId: string; goalId?: string };

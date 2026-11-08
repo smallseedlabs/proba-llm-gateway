@@ -14,6 +14,7 @@ import { SystemClock } from '../adapters/system-clock.js';
 import { MemoryAuditPublisher } from '../testing/memory-audit.js';
 import { testConfig } from '../testing/config.js';
 import { AdjustableClock, RecordingAdsDomain, ScriptedContextPort, ScriptedLlmClient } from '../testing/doubles.js';
+import { ContextClientError } from '../ports/context.js';
 import type { Clock } from '../ports/clock.js';
 import { testCaller, testRunRequest, testToolTurn, testTurn } from '../testing/fixtures.js';
 import type { RunStore } from '../ports/run-store.js';
@@ -79,6 +80,32 @@ describe('loop coordinator', () => {
     expect(snapshot.outputs).toEqual([{ type: 'reply', text: 'hello back' }]);
     expect(llm.completeCalls).toBe(1);
     expect(context.builds).toBe(1);
+    expect(context.pings).toBe(1);
+  });
+
+  it('returns blocked with zero model dispatch when Context is down', async () => {
+    const llm = new ScriptedLlmClient([testTurn()]);
+    const context = new ScriptedContextPort();
+    context.pingError = new ContextClientError('unreachable', 'context bridge down');
+    const { coordinator: loop } = coordinator({ llm, context });
+    const snapshot = await loop.start(testRunRequest(), testCaller());
+    expect(snapshot.status).toBe('blocked');
+    expect(snapshot.error?.code).toBe('preflight_blocked');
+    expect(llm.completeCalls).toBe(0);
+    expect(context.builds).toBe(0);
+  });
+
+  it('blocks paid LLM dispatch when unknown quota policy is refuse', async () => {
+    const llm = new ScriptedLlmClient([testTurn()]);
+    const { coordinator: loop } = coordinator({
+      llm,
+      config: testConfig({ llm: { ...testConfig().llm, quotaUnknownPolicy: 'refuse' } }),
+    });
+    const snapshot = await loop.start(testRunRequest(), testCaller());
+    expect(snapshot.status).toBe('blocked');
+    expect(snapshot.error?.code).toBe('preflight_blocked');
+    expect(snapshot.needs?.some((n) => (n as { capability?: string }).capability === 'llm.quota')).toBe(true);
+    expect(llm.completeCalls).toBe(0);
   });
 
   it('pauses for Hub approval, then executes bound Ads args on resume', async () => {

@@ -23,6 +23,8 @@ describe('prerequisite graph', () => {
     });
     const order = orderPrerequisites(manifest.requires);
     expect(order.slice(0, 4)).toEqual(['auth.workspace', 'intent', 'limb.manifest', 'run.budget']);
+    expect(manifest.requires).toContain('context.ready');
+    expect(order.indexOf('auth.workspace')).toBeLessThan(order.indexOf('context.ready'));
     expect(order.indexOf('ads.service')).toBeLessThan(order.indexOf('ads.connection'));
     expect(order.indexOf('ads.connection')).toBeLessThan(order.indexOf('ads.billing'));
     expect(order.indexOf('ads.service')).toBeLessThan(order.indexOf('llm.quota'));
@@ -45,6 +47,7 @@ describe('prerequisite graph', () => {
     expect(manifest.requires).toContain('run.budget');
     expect(manifest.requires).toContain('auth.workspace');
     expect(manifest.requires).not.toContain('ads.billing');
+    expect(manifest.requires).not.toContain('context.ready');
   });
 
   it('detects cycles in a graph definition', () => {

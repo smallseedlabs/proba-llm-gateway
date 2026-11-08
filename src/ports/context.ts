@@ -39,5 +39,6 @@ export class ContextClientError extends Error {
 
 export interface ContextPort {
   build(request: ContextRequest, options: ContextBuildOptions): Promise<ContextPacket>;
-  ping?(): Promise<void>;
+  /** Readiness only: GET /ready or /health. Must not POST /v1/complete or spend. */
+  ping(): Promise<void>;
 }

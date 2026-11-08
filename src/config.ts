@@ -71,6 +71,12 @@ function parseBillingRequirement(raw: string | undefined): 'billing_eligibility'
   throw new ConfigError('ADS_BILLING_REQUIREMENT must be billing_eligibility or exact_balance');
 }
 
+function parseQuotaUnknownPolicy(raw: string | undefined): 'allow_with_run_budget' | 'refuse' {
+  const value = (raw ?? 'allow_with_run_budget').trim();
+  if (value === 'allow_with_run_budget' || value === 'refuse') return value;
+  throw new ConfigError('LLM_QUOTA_UNKNOWN_POLICY must be allow_with_run_budget or refuse');
+}
+
 function runtimeEnv(raw: string | undefined): RuntimeEnv {
   const value = (raw ?? 'development').trim().toLowerCase();
   if (value === 'development' || value === 'test' || value === 'production') return value;
@@ -145,6 +151,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayService
       tokenIssuer: (env.LLM_TOKEN_ISSUER ?? DEFAULT_LLM_TOKEN_ISSUER).trim() || DEFAULT_LLM_TOKEN_ISSUER,
       tokenSubject: (env.LLM_TOKEN_SUBJECT ?? DEFAULT_LLM_TOKEN_SUBJECT).trim() || DEFAULT_LLM_TOKEN_SUBJECT,
       tokenTtlSeconds: envInt(env, 'LLM_TOKEN_TTL_SECONDS', 60, 1, SERVICE_TOKEN_MAX_TTL_SECONDS),
+      quotaUnknownPolicy: parseQuotaUnknownPolicy(env.LLM_QUOTA_UNKNOWN_POLICY),
     },
     context: {
       baseUrl: contextBaseUrl,

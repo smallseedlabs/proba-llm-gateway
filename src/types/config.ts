@@ -37,6 +37,12 @@ export interface LlmClientConfig {
   tokenIssuer: string;
   tokenSubject: string;
   tokenTtlSeconds: number;
+  /**
+   * When proba-llm has no `/v1/quota` (404) or the body is not authoritative:
+   * `allow_with_run_budget` (default) still applies local token/iteration caps;
+   * unknown is not a verified credit balance. `refuse` blocks paid model calls.
+   */
+  quotaUnknownPolicy: 'allow_with_run_budget' | 'refuse';
 }
 
 export interface AdsDomainConfig {
