@@ -94,7 +94,10 @@ export class AmbiguousOutcomeError extends Error {
 export class BudgetExhaustedError extends Error {
   readonly code = 'budget_exhausted';
 
-  constructor(message: string) {
+  constructor(
+    message: string,
+    readonly budgetState: 'insufficient' | 'unknown' = 'insufficient'
+  ) {
     super(message);
     this.name = 'BudgetExhaustedError';
   }

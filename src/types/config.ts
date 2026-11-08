@@ -37,6 +37,12 @@ export interface LlmClientConfig {
   tokenIssuer: string;
   tokenSubject: string;
   tokenTtlSeconds: number;
+  /**
+   * When proba-llm has no `/v1/quota` (404) or the body is not authoritative:
+   * `allow_with_run_budget` (default) still applies local token/iteration caps;
+   * unknown is not a verified credit balance. `refuse` blocks paid model calls.
+   */
+  quotaUnknownPolicy: 'allow_with_run_budget' | 'refuse';
 }
 
 export interface AdsDomainConfig {
@@ -79,9 +85,12 @@ export interface LimitsConfig {
   maxCompletionTokens: number | null;
   maxTotalTokens: number | null;
   /**
-   * USD ceiling for a whole run. Enforced only when every counted LLM turn
-   * returned a numeric cost estimate. `unknown` is not treated as zero: a
-   * ceiling cannot be proven and further paid calls are refused.
+   * Optional whole-run USD ceiling. Unset (`null`) is the default: no monetary
+   * cap, unknown cost stays explicit, token/iteration caps still apply.
+   * When set, the next paid LLM call is dispatched only if a conservative
+   * cost bound (authoritative unit prices × this-call token caps) fits the
+   * remaining ceiling. Unknown pricing/cost is never $0 and there is no
+   * first-call grace. This is not a product-wide deny and is not a $2 default.
    */
   maxCostUsd: number | null;
   /**

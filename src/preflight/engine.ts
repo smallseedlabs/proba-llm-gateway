@@ -5,9 +5,11 @@
  * provider every iteration. LLM/user/tool output cannot redefine this policy.
  */
 
-import { PreflightBlockedError } from '../errors.js';
+import { BudgetExhaustedError, PreflightBlockedError } from '../errors.js';
 import { VERB_CATALOG } from '../limbs/catalog.js';
 import type { AdsDomainPort } from '../ports/ads.js';
+import type { ContextPort } from '../ports/context.js';
+import { ContextClientError } from '../ports/context.js';
 import type { LlmClient } from '../ports/llm-client.js';
 import type { RunRecord } from '../ports/run-store.js';
 import type { Clock } from '../ports/clock.js';
@@ -16,6 +18,7 @@ import type { HubRunRequest } from '../types/run.js';
 import type {
   AdsPreflightReport,
   CapabilityNeed,
+  LlmPricingClaim,
   LlmQuotaClaim,
   OperationIntent,
   PreflightDecision,
@@ -40,6 +43,7 @@ export interface PreflightDeps {
   clock: Clock;
   ads: AdsDomainPort;
   llm: LlmClient;
+  context: ContextPort;
 }
 
 export interface RunPreflightOptions {
@@ -139,6 +143,20 @@ function mutateIntent(mutate: { verb: string; args: Record<string, unknown> }): 
   };
 }
 
+async function llmPricing(llm: LlmClient): Promise<LlmPricingClaim> {
+  if (typeof llm.pricing !== 'function') {
+    return {
+      kind: 'unknown',
+      reason: 'proba-llm does not expose authoritative unit prices; gateway does not invent rates',
+    };
+  }
+  try {
+    return await llm.pricing();
+  } catch (err) {
+    return { kind: 'unavailable', reason: err instanceof Error ? err.message : 'LLM pricing probe failed' };
+  }
+}
+
 async function llmQuota(llm: LlmClient): Promise<LlmQuotaClaim> {
   if (typeof llm.quota !== 'function') {
     return { kind: 'unknown', reason: 'proba-llm does not expose an authoritative quota claim; run token/cost budgets still apply' };
@@ -150,7 +168,10 @@ async function llmQuota(llm: LlmClient): Promise<LlmQuotaClaim> {
   }
 }
 
-function needForQuota(quota: LlmQuotaClaim): CapabilityNeed | undefined {
+function needForQuota(
+  quota: LlmQuotaClaim,
+  policy: GatewayServiceConfig['llm']['quotaUnknownPolicy']
+): CapabilityNeed | undefined {
   if (quota.kind === 'unavailable') {
     return {
       type: 'capability',
@@ -167,6 +188,16 @@ function needForQuota(quota: LlmQuotaClaim): CapabilityNeed | undefined {
       state: 'insufficient',
       claim: 'verified',
       message: 'proba-llm reported the workspace is not eligible for another paid completion',
+    };
+  }
+  if (quota.kind === 'unknown' && policy === 'refuse') {
+    return {
+      type: 'capability',
+      capability: 'llm.quota',
+      state: 'unknown',
+      claim: 'unknown',
+      message:
+        'proba-llm quota is unknown (no authoritative /v1/quota). LLM_QUOTA_UNKNOWN_POLICY=refuse blocks paid model calls; unknown is not a verified credit balance',
     };
   }
   return undefined;
@@ -254,14 +285,17 @@ export async function runPreflight(
 
   let runEligible = true;
   let runMessage: string | undefined;
+  let runBudgetState: CapabilityNeed['state'] = 'insufficient';
   try {
     if (phase === 'brain') {
+      if (usage.hasMonetaryCap()) usage.observePricing(await llmPricing(deps.llm));
       usage.assertCanStartIteration();
       usage.assertCanCallLlm();
     } else usage.assertCanCallTool();
   } catch (err) {
     runEligible = false;
     runMessage = err instanceof Error ? err.message : 'run budget exhausted';
+    runBudgetState = err instanceof BudgetExhaustedError ? err.budgetState : 'insufficient';
   }
   const runBudget = { kind: 'local_run_budget' as const, eligible: runEligible, message: runMessage };
 
@@ -381,7 +415,7 @@ export async function runPreflight(
         needs.push({
           type: 'capability',
           capability: 'run.budget',
-          state: 'insufficient',
+          state: runBudgetState,
           message: runMessage ?? 'Proba run token/cost budget is exhausted',
         });
         remember(id, 'blocked', runMessage ?? 'run budget exhausted', false);
@@ -408,16 +442,70 @@ export async function runPreflight(
       continue;
     }
 
+    if (id === 'context.ready') {
+      if (!deps.config.context.baseUrl.trim()) {
+        needs.push({
+          type: 'capability',
+          capability: 'context.ready',
+          state: 'missing',
+          message: 'CONTEXT_BRIDGE_URL is not configured; refusing paid model calls',
+        });
+        remember(id, 'blocked', 'context bridge unconfigured', false);
+        break;
+      }
+      if (!request.goalId || !request.threadId) {
+        needs.push({
+          type: 'capability',
+          capability: 'context.ready',
+          state: 'missing',
+          message: 'goalId and threadId are required for context enrichment before a paid model call',
+        });
+        remember(id, 'blocked', 'context identity missing', false);
+        break;
+      }
+      if (deps.config.env !== 'test' && !request.actAsAssertion) {
+        needs.push({
+          type: 'capability',
+          capability: 'context.ready',
+          state: 'unauthorized',
+          message: 'act-as assertion is required for context enrichment before a paid model call',
+        });
+        remember(id, 'blocked', 'act-as missing', false);
+        break;
+      }
+      try {
+        await deps.context.ping();
+      } catch (err) {
+        const down = err instanceof ContextClientError ? err : undefined;
+        needs.push({
+          type: 'capability',
+          capability: 'context.ready',
+          state: down?.code === 'timeout' ? 'unavailable' : down?.code === 'unreachable' ? 'unavailable' : 'unavailable',
+          message: down?.message ?? (err instanceof Error ? err.message : 'context bridge is not ready'),
+        });
+        remember(id, 'blocked', down?.message ?? 'context ping failed', false);
+        break;
+      }
+      remember(id, 'ready', 'context bridge readiness probe succeeded', false);
+      continue;
+    }
+
     if (id === 'llm.quota') {
-      const quotaCached = cachedReady('llm.quota');
-      if (!quotaCached) quota = await llmQuota(deps.llm);
-      const quotaNeed = needForQuota(quota);
+      quota = await llmQuota(deps.llm);
+      const quotaNeed = needForQuota(quota, deps.config.llm.quotaUnknownPolicy);
       if (quotaNeed) {
         needs.push(quotaNeed);
         remember(id, 'blocked', quotaNeed.message, false);
         break;
       }
-      remember(id, quota.kind === 'unknown' ? 'unknown' : 'ready', quota.kind === 'unknown' ? quota.reason : 'llm quota eligible or unknown with run budget applying', false);
+      remember(
+        id,
+        quota.kind === 'unknown' ? 'unknown' : 'ready',
+        quota.kind === 'unknown'
+          ? `${quota.reason} Policy: ${deps.config.llm.quotaUnknownPolicy} (local token/iteration caps still apply; unknown is not a provider credit balance)`
+          : 'llm quota eligible',
+        false
+      );
       continue;
     }
 

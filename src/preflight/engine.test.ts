@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { applyPreflightToRecord, runPreflight } from './engine.js';
 import { testConfig } from '../testing/config.js';
-import { AdjustableClock, RecordingAdsDomain, ScriptedLlmClient } from '../testing/doubles.js';
+import { AdjustableClock, RecordingAdsDomain, ScriptedContextPort, ScriptedLlmClient } from '../testing/doubles.js';
+import { ContextClientError } from '../ports/context.js';
 import { testRunRequest, testTurn } from '../testing/fixtures.js';
 import { emptyUsageTotals } from '../types/usage.js';
 import { RunUsageLedger } from '../usage/reservations.js';
@@ -41,7 +42,7 @@ describe('preflight graph engine', () => {
     const record = recordOf(request);
     const usage = new RunUsageLedger({ ...config.limits, contextBudgetTokens: config.context.maxBudgetTokens });
     const signal = new AbortController().signal;
-    const deps = { config, clock, ads, llm };
+    const deps = { config, clock, ads, llm, context: new ScriptedContextPort() };
 
     const first = await runPreflight(deps, request, record, usage, signal, { phase: 'brain' });
     expect(first.allowed).toBe(true);
@@ -49,12 +50,44 @@ describe('preflight graph engine', () => {
     const second = await runPreflight(deps, request, record, usage, signal, { phase: 'brain' });
     expect(second.allowed).toBe(true);
     expect(second.evaluated.some((row) => row.id === 'ads.service' && row.reused)).toBe(true);
+    expect(second.evaluated.some((row) => row.id === 'context.ready' && row.reused)).toBe(true);
     expect(ads.preflightCalls).toBe(1);
+    expect(deps.context.pings).toBe(1);
 
     clock.advance(8_000);
     const third = await runPreflight(deps, request, record, usage, signal, { phase: 'brain' });
     expect(third.allowed).toBe(true);
     expect(ads.preflightCalls).toBe(2);
+    expect(deps.context.pings).toBe(2);
+  });
+
+  it('reuses still-fresh Context readiness and re-probes after expiry, blocking when it is down', async () => {
+    const ads = new RecordingAdsDomain();
+    const llm = new ScriptedLlmClient([testTurn()]);
+    const clock = new AdjustableClock();
+    const config = testConfig({ ads: { ...testConfig().ads, preflightFreshnessMs: 5_000 } });
+    const request = testRunRequest({ stepType: 'interpret_message' });
+    const record = recordOf(request);
+    const usage = new RunUsageLedger({ ...config.limits, contextBudgetTokens: config.context.maxBudgetTokens });
+    const signal = new AbortController().signal;
+    const context = new ScriptedContextPort();
+    const deps = { config, clock, ads, llm, context };
+
+    const first = await runPreflight(deps, request, record, usage, signal, { phase: 'brain' });
+    expect(first.allowed).toBe(true);
+    applyPreflightToRecord(record, first);
+    const second = await runPreflight(deps, request, record, usage, signal, { phase: 'brain' });
+    expect(second.allowed).toBe(true);
+    expect(second.evaluated.some((row) => row.id === 'context.ready' && row.reused)).toBe(true);
+    expect(context.pings).toBe(1);
+
+    clock.advance(8_000);
+    context.pingError = new ContextClientError('unreachable', 'context bridge went down after cache expiry');
+    const staleDown = await runPreflight(deps, request, record, usage, signal, { phase: 'brain' });
+    expect(staleDown.allowed).toBe(false);
+    expect(staleDown.needs.some((need) => need.capability === 'context.ready' && need.state === 'unavailable')).toBe(true);
+    expect(context.pings).toBe(2);
+    expect(llm.completeCalls).toBe(0);
   });
 
   it('does not query Ads for analysis/planning and does not call the LLM quota client as a paid completion', async () => {
@@ -71,7 +104,7 @@ describe('preflight graph engine', () => {
     const record = recordOf(request);
     const config = testConfig();
     const decision = await runPreflight(
-      { config, clock: new AdjustableClock(), ads, llm },
+      { config, clock: new AdjustableClock(), ads, llm, context: new ScriptedContextPort() },
       request,
       record,
       new RunUsageLedger({ ...config.limits, contextBudgetTokens: config.context.maxBudgetTokens }),
@@ -96,7 +129,7 @@ describe('preflight graph engine', () => {
     };
     const llm = new ScriptedLlmClient([testTurn()]);
     const config = testConfig();
-    const deps = { config, clock: new AdjustableClock(), ads, llm };
+    const deps = { config, clock: new AdjustableClock(), ads, llm, context: new ScriptedContextPort() };
     const usage = new RunUsageLedger({ ...config.limits, contextBudgetTokens: config.context.maxBudgetTokens });
     const signal = new AbortController().signal;
 
@@ -117,6 +150,176 @@ describe('preflight graph engine', () => {
     const pause = await runPreflight(deps, pauseReq, recordOf(pauseReq), usage, signal, { phase: 'brain' });
     expect(pause.allowed).toBe(true);
     expect(pause.relaxed.some((row) => row.capability === 'ads.billing')).toBe(true);
+    expect(llm.completeCalls).toBe(0);
+  });
+
+  it('blocks paid model dispatch when Context is missing, down, or identity is incomplete', async () => {
+    const ads = new RecordingAdsDomain();
+    const llm = new ScriptedLlmClient([testTurn()]);
+    const clock = new AdjustableClock();
+    const usageFor = (config: ReturnType<typeof testConfig>) =>
+      new RunUsageLedger({ ...config.limits, contextBudgetTokens: config.context.maxBudgetTokens });
+    const signal = new AbortController().signal;
+    const request = testRunRequest({ stepType: 'interpret_message' });
+
+    const missingUrl = testConfig({ context: { ...testConfig().context, baseUrl: '' } });
+    const missing = await runPreflight(
+      { config: missingUrl, clock, ads, llm, context: new ScriptedContextPort() },
+      request,
+      recordOf(request),
+      usageFor(missingUrl),
+      signal,
+      { phase: 'brain' }
+    );
+    expect(missing.allowed).toBe(false);
+    expect(missing.needs.some((need) => need.capability === 'context.ready' && need.state === 'missing')).toBe(true);
+    expect(llm.completeCalls).toBe(0);
+
+    const down = new ScriptedContextPort();
+    down.pingError = new ContextClientError('unreachable', 'context bridge down');
+    const blockedDown = await runPreflight(
+      { config: testConfig(), clock, ads, llm, context: down },
+      request,
+      recordOf(request),
+      usageFor(testConfig()),
+      signal,
+      { phase: 'brain' }
+    );
+    expect(blockedDown.allowed).toBe(false);
+    expect(blockedDown.needs.some((need) => need.capability === 'context.ready' && need.state === 'unavailable')).toBe(true);
+    expect(llm.completeCalls).toBe(0);
+
+    const noGoal = testRunRequest({ stepType: 'interpret_message', goalId: undefined, threadId: undefined });
+    const blockedId = await runPreflight(
+      { config: testConfig(), clock, ads, llm, context: new ScriptedContextPort() },
+      noGoal,
+      recordOf(noGoal),
+      usageFor(testConfig()),
+      signal,
+      { phase: 'brain' }
+    );
+    expect(blockedId.allowed).toBe(false);
+    expect(blockedId.needs.some((need) => need.capability === 'context.ready')).toBe(true);
+    expect(llm.completeCalls).toBe(0);
+
+    const prod = testConfig({ env: 'development' });
+    const blockedActAs = await runPreflight(
+      { config: prod, clock, ads, llm, context: new ScriptedContextPort() },
+      request,
+      recordOf(request),
+      usageFor(prod),
+      signal,
+      { phase: 'brain' }
+    );
+    expect(blockedActAs.allowed).toBe(false);
+    expect(blockedActAs.needs.some((need) => need.capability === 'context.ready' && need.state === 'unauthorized')).toBe(
+      true
+    );
+    expect(llm.completeCalls).toBe(0);
+  });
+
+  it('keeps unknown quota explicit, never invents a balance, and refuses when policy says so', async () => {
+    const ads = new RecordingAdsDomain();
+    const llm = new ScriptedLlmClient([testTurn()]);
+    const clock = new AdjustableClock();
+    const signal = new AbortController().signal;
+    const request = testRunRequest({ stepType: 'interpret_message' });
+    const base = testConfig();
+    const usage = new RunUsageLedger({ ...base.limits, contextBudgetTokens: base.context.maxBudgetTokens });
+
+    const allowedUnknown = await runPreflight(
+      { config: base, clock, ads, llm, context: new ScriptedContextPort() },
+      request,
+      recordOf(request),
+      usage,
+      signal,
+      { phase: 'brain' }
+    );
+    expect(allowedUnknown.allowed).toBe(true);
+    expect(allowedUnknown.llmQuota.kind).toBe('unknown');
+    expect(llm.completeCalls).toBe(0);
+    expect(llm.quotaCalls).toBeGreaterThan(0);
+
+    llm.quotaClaim = { kind: 'unavailable', reason: 'proba-llm /v1/quota returned HTTP 503' };
+    const downQuota = await runPreflight(
+      { config: base, clock, ads, llm, context: new ScriptedContextPort() },
+      request,
+      recordOf(request),
+      usage,
+      signal,
+      { phase: 'brain' }
+    );
+    expect(downQuota.allowed).toBe(false);
+    expect(downQuota.needs.some((need) => need.capability === 'llm.service')).toBe(true);
+    expect(llm.completeCalls).toBe(0);
+
+    const refuseCfg = testConfig({ llm: { ...testConfig().llm, quotaUnknownPolicy: 'refuse' } });
+    llm.quotaClaim = { kind: 'unknown', reason: 'proba-llm has no quota endpoint; /ready is not a credit balance' };
+    const refused = await runPreflight(
+      { config: refuseCfg, clock, ads, llm, context: new ScriptedContextPort() },
+      request,
+      recordOf(request),
+      new RunUsageLedger({ ...refuseCfg.limits, contextBudgetTokens: refuseCfg.context.maxBudgetTokens }),
+      signal,
+      { phase: 'brain' }
+    );
+    expect(refused.allowed).toBe(false);
+    expect(refused.needs.some((need) => need.capability === 'llm.quota' && need.state === 'unknown')).toBe(true);
+    expect(llm.completeCalls).toBe(0);
+  });
+
+  it('blocks a USD ceiling before any paid call when pricing is unknown, and allows only a fitting bound', async () => {
+    const ads = new RecordingAdsDomain();
+    const llm = new ScriptedLlmClient([testTurn()]);
+    const clock = new AdjustableClock();
+    const signal = new AbortController().signal;
+    const request = testRunRequest({ stepType: 'interpret_message' });
+    const capped = testConfig({ limits: { ...testConfig().limits, maxCostUsd: 1 } });
+    const usageFor = (config: ReturnType<typeof testConfig>) =>
+      new RunUsageLedger({ ...config.limits, contextBudgetTokens: config.context.maxBudgetTokens });
+
+    const unknownPricing = await runPreflight(
+      { config: capped, clock, ads, llm, context: new ScriptedContextPort() },
+      request,
+      recordOf(request),
+      usageFor(capped),
+      signal,
+      { phase: 'brain' }
+    );
+    expect(unknownPricing.allowed).toBe(false);
+    expect(unknownPricing.needs.some((need) => need.capability === 'run.budget' && need.state === 'unknown')).toBe(true);
+    expect(llm.completeCalls).toBe(0);
+
+    llm.pricingClaim = {
+      kind: 'verified',
+      promptUsdPerMillion: 0.15,
+      completionUsdPerMillion: 0.6,
+      version: 'test-v1',
+    };
+    const fitting = await runPreflight(
+      { config: capped, clock, ads, llm, context: new ScriptedContextPort() },
+      request,
+      recordOf(request),
+      usageFor(capped),
+      signal,
+      { phase: 'brain' }
+    );
+    expect(fitting.allowed).toBe(true);
+    expect(llm.completeCalls).toBe(0);
+
+    const tight = testConfig({ limits: { ...testConfig().limits, maxCostUsd: 0.000001 } });
+    const insufficient = await runPreflight(
+      { config: tight, clock, ads, llm, context: new ScriptedContextPort() },
+      request,
+      recordOf(request),
+      usageFor(tight),
+      signal,
+      { phase: 'brain' }
+    );
+    expect(insufficient.allowed).toBe(false);
+    expect(insufficient.needs.some((need) => need.capability === 'run.budget' && need.state === 'insufficient')).toBe(
+      true
+    );
     expect(llm.completeCalls).toBe(0);
   });
 });

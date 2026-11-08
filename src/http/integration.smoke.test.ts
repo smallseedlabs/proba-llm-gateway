@@ -88,6 +88,9 @@ describe('isolated HTTP integration smoke', () => {
       return { status: 200, body: hasToolResult ? finalTurn('campaign is live') : toolTurn() };
     });
     contextServer = await listenJsonServer(async ({ method, url, headers, body }) => {
+      if (method === 'GET' && (url === '/ready' || url === '/health')) {
+        return { status: 200, body: { status: 'ok', service: 'context' } };
+      }
       if (method !== 'POST' || url !== '/v1/context/build') return { status: 404, body: { error: 'not_found' } };
       contextCalls.push({ authorization: headers.authorization, body });
       const req = body as { traceId: string; workspaceId: string; goalId?: string };
@@ -311,8 +314,9 @@ describe('isolated HTTP integration smoke', () => {
     expect(llmCalls.length).toBe(before + 1);
   });
 
-  it('enforces a USD ceiling after unknown cost', async () => {
+  it('blocks the first paid LLM call when a USD ceiling is set and pricing is unknown', async () => {
     llmMode = 'unknown-cost';
+    const before = llmCalls.length;
     const payload = testRunRequest({
       idempotencyKey: randomUUID(),
       budget: { maxCostUsd: 1, maxLlmCalls: 8, maxIterations: 8 },
@@ -323,15 +327,18 @@ describe('isolated HTTP integration smoke', () => {
       headers: { authorization: `Bearer ${token}` },
       payload,
     });
-    const askId = (first.json().needs as Array<{ askId: string }>)[0]?.askId;
-    const resumed = await app.inject({
+    expect(first.statusCode).toBe(200);
+    expect(first.json().status).toBe('blocked');
+    expect(first.json().error.code).toBe('preflight_blocked');
+    expect(llmCalls.length).toBe(before);
+    const again = await app.inject({
       method: 'POST',
       url: '/v1/runs',
       headers: { authorization: `Bearer ${token}` },
-      payload: { ...payload, resume: { askId, choice: 'approve' } },
+      payload,
     });
-    expect(resumed.json().status).toBe('failed');
-    expect(resumed.json().error.code).toBe('budget_exhausted');
+    expect(again.json().status).toBe('blocked');
+    expect(llmCalls.length).toBe(before);
   });
 
   it('replays unpublished audit events without extra LLM calls', async () => {

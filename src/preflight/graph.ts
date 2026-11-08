@@ -40,6 +40,7 @@ export const PREREQUISITE_NODES: Record<PrerequisiteId, PrerequisiteNode> = {
   'limb.manifest': { id: 'limb.manifest', cost: 0, kind: 'local', dependsOn: [] },
   'ads.service': { id: 'ads.service', cost: 1, kind: 'remote', dependsOn: [] },
   'llm.quota': { id: 'llm.quota', cost: 1, kind: 'remote', dependsOn: [] },
+  'context.ready': { id: 'context.ready', cost: 1, kind: 'remote', dependsOn: ['auth.workspace'] },
   'ads.connection': { id: 'ads.connection', cost: 2, kind: 'remote', dependsOn: ['ads.service'] },
   'ads.permissions': { id: 'ads.permissions', cost: 2, kind: 'remote', dependsOn: ['ads.service', 'ads.connection'] },
   'ads.blueprint': { id: 'ads.blueprint', cost: 2, kind: 'remote', dependsOn: ['ads.service'] },
@@ -77,7 +78,9 @@ export function operationManifest(input: {
   const { phase, intent } = input;
   const spendClass = intent.spendClass;
   const requires: PrerequisiteId[] = ['intent', 'auth.workspace', 'run.budget'];
-  if (phase === 'brain') requires.push('llm.quota');
+  if (phase === 'brain') {
+    requires.push('llm.quota', 'context.ready');
+  }
 
   if (intent.kind === 'insufficient_intent') {
     return { id: `${phase}:insufficient_intent`, phase, spendClass, requires: Object.freeze(requires) };

@@ -5,11 +5,11 @@
 
 import { ToolRefusedError } from '../errors.js';
 import type { Clock } from '../ports/clock.js';
-import type { ContextBuildOptions, ContextPort } from '../ports/context.js';
+import { ContextClientError, type ContextBuildOptions, type ContextPort } from '../ports/context.js';
 import type { LimbCall, LimbExecutionContext, LimbExecutor, LimbResult } from '../ports/limbs.js';
 import { LlmClientError, type LlmClient, type LlmCompleteOptions } from '../ports/llm-client.js';
 import type { AdsDomainAction, AdsDomainPort, AdsDomainResult } from '../ports/ads.js';
-import type { AdsBillingClaim, AdsPreflightQuery, AdsPreflightReport } from '../types/preflight.js';
+import type { AdsBillingClaim, AdsPreflightQuery, AdsPreflightReport, LlmPricingClaim, LlmQuotaClaim } from '../types/preflight.js';
 import type { CompleteRequest, TurnResponse } from '../types/llm.js';
 import type { ContextPacket, ContextRequest } from '../protocol.js';
 import { testContextPacket } from './fixtures.js';
@@ -32,10 +32,25 @@ export class TrackingLlmClient implements LlmClient {
 export class ScriptedLlmClient implements LlmClient {
   readonly name = 'fake';
   completeCalls = 0;
+  quotaCalls = 0;
   requests: CompleteRequest[] = [];
   hang?: () => Promise<void>;
+  quotaClaim?: LlmQuotaClaim | (() => Promise<LlmQuotaClaim>);
+  pricingClaim?: LlmPricingClaim;
 
   constructor(private readonly turns: TurnResponse[]) {}
+
+  async quota(): Promise<LlmQuotaClaim> {
+    this.quotaCalls += 1;
+    if (typeof this.quotaClaim === 'function') return this.quotaClaim();
+    if (this.quotaClaim) return this.quotaClaim;
+    return { kind: 'unknown', reason: 'proba-llm has no quota endpoint; /ready is not a credit balance' };
+  }
+
+  async pricing(): Promise<LlmPricingClaim> {
+    if (this.pricingClaim) return this.pricingClaim;
+    return { kind: 'unknown', reason: 'proba-llm has no pricing endpoint; /ready is not a unit price' };
+  }
 
   async complete(request: CompleteRequest, options: LlmCompleteOptions): Promise<TurnResponse> {
     this.completeCalls += 1;
@@ -65,6 +80,12 @@ export class ScriptedLlmClient implements LlmClient {
 
 export class TrackingContextPort implements ContextPort {
   builds = 0;
+  pings = 0;
+
+  async ping(): Promise<void> {
+    this.pings += 1;
+    throw new ContextClientError('unreachable', 'test context port must not be called in this slice');
+  }
 
   async build(_request: ContextRequest, _options: ContextBuildOptions): Promise<ContextPacket> {
     this.builds += 1;
@@ -75,11 +96,19 @@ export class TrackingContextPort implements ContextPort {
 /** TEST STUB: returns a protocol ContextPacket. */
 export class ScriptedContextPort implements ContextPort {
   builds = 0;
+  pings = 0;
   requests: ContextRequest[] = [];
   packet: ContextPacket;
+  pingError?: ContextClientError;
 
   constructor(packet: ContextPacket = testContextPacket()) {
     this.packet = packet;
+  }
+
+  async ping(): Promise<void> {
+    this.pings += 1;
+    if (this.pingError) throw this.pingError;
+    return;
   }
 
   async build(request: ContextRequest, _options: ContextBuildOptions): Promise<ContextPacket> {

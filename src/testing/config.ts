@@ -20,6 +20,7 @@ export function testConfig(overrides: Partial<GatewayServiceConfig> = {}): Gatew
       tokenIssuer: 'proba-gateway',
       tokenSubject: 'gateway',
       tokenTtlSeconds: 60,
+      quotaUnknownPolicy: 'allow_with_run_budget',
     },
     context: {
       baseUrl: 'http://context:3500',

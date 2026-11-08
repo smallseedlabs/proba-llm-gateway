@@ -72,7 +72,7 @@ export async function runBoundedLoop(
   for (let n = 0; n < hardCap; n += 1) {
     cancellation.throwIfAborted();
     const preflight = await runPreflight(
-      { config: deps.config, clock: deps.clock, ads: deps.ads, llm: deps.llm },
+      { config: deps.config, clock: deps.clock, ads: deps.ads, llm: deps.llm, context: deps.context },
       request,
       record,
       usage,
@@ -93,14 +93,28 @@ export async function runBoundedLoop(
     await deps.persist(record);
     if (!preflight.allowed) {
       const budget = preflight.needs.find((need) => need.capability === 'run.budget');
-      if (budget) throw new BudgetExhaustedError(budget.message);
+      if (budget?.state === 'insufficient') throw new BudgetExhaustedError(budget.message);
       return blockedSnapshot(deps, record, preflight.needs);
     }
 
+    let packet: ContextPacket | undefined;
+    try {
+      packet = await loadContext(deps, record, request, cancellation, usage);
+    } catch (err) {
+      if (err instanceof ContextClientError || err instanceof RequestValidationError) {
+        return blockedSnapshot(deps, record, [
+          {
+            type: 'capability',
+            capability: 'context.ready',
+            state: err instanceof ContextClientError && err.code === 'timeout' ? 'unavailable' : 'unavailable',
+            message: err.message,
+          },
+        ]);
+      }
+      throw err;
+    }
     const iteration = usage.recordIteration();
     record.iteration = iteration;
-
-    const packet = await loadContext(deps, record, request, cancellation, usage);
     record.messages = record.messages.length === 0 ? initialMessages(packet, request) : refreshSystem(record.messages, packet);
 
     usage.assertCanCallLlm();
@@ -144,8 +158,8 @@ async function loadContext(
         traceId: request.traceId,
         workspaceId: request.workspaceId,
         userId: request.userId,
-        goalId: request.goalId ?? '11111111-1111-4111-8111-111111111111',
-        threadId: request.threadId ?? '11111111-1111-4111-8111-111111111112',
+        goalId: request.goalId!,
+        threadId: request.threadId!,
         stepId: request.stepId,
         stepType: request.stepType,
         budgetTokens: usage.contextBudgetTokens(),
@@ -185,12 +199,7 @@ async function callLlm(
     throw new AmbiguousOutcomeError('LLM turn was dispatched and is not safe to retry');
   }
 
-  const remainingCompletion =
-    deps.config.limits.maxCompletionTokens === null
-      ? deps.config.limits.responseTokenReserve
-      : Math.max(1, deps.config.limits.maxCompletionTokens - usage.snapshot().completionTokens);
-  const reserve = deps.config.limits.responseTokenReserve || remainingCompletion;
-  const maxTokens = Math.max(1, Math.min(reserve, remainingCompletion));
+  const maxTokens = usage.completionTokenCap();
 
   const llmRequest: CompleteRequest = {
     traceId: request.traceId,
@@ -429,7 +438,7 @@ async function dispatchTools(
       args: decision.args,
     };
     const mutationPreflight = await runPreflight(
-      { config: deps.config, clock: deps.clock, ads: deps.ads, llm: deps.llm },
+      { config: deps.config, clock: deps.clock, ads: deps.ads, llm: deps.llm, context: deps.context },
       request,
       record,
       usage,
