@@ -1,0 +1,81 @@
+# Local internal stack. Published ports bind 127.0.0.1 only (no public ingress).
+# Secrets have no defaults: compose refuses to start until ${NAME:?...} is set.
+# Do not put a DeepSeek key here.
+services:
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: proba-llm-gateway:local
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3700:3700"
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: "3700"
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      CALLER_ISSUERS: proba-hub
+      CALLER_SUBJECTS: hub
+      HUB_SERVICE_PUBLIC_KEY_FILE: /run/secrets/hub_service_jwks
+      HUB_ASSERTION_PUBLIC_KEY_FILE: /run/secrets/hub_assertion_jwks
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://llm:3600}
+      LLM_ALLOWED_HOSTS: ${LLM_ALLOWED_HOSTS:-llm}
+      GATEWAY_LLM_PRIVATE_KEY_FILE: /run/secrets/gateway_llm_private_key
+      GATEWAY_LLM_KEY_ID: ${GATEWAY_LLM_KEY_ID:?set GATEWAY_LLM_KEY_ID}
+      LLM_TOKEN_ISSUER: proba-gateway
+      LLM_TOKEN_SUBJECT: gateway
+      CONTEXT_BRIDGE_URL: ${CONTEXT_BRIDGE_URL:-http://context:3500}
+      CONTEXT_ALLOWED_HOSTS: ${CONTEXT_ALLOWED_HOSTS:-context}
+      CONTEXT_MAX_BUDGET_TOKENS: ${CONTEXT_MAX_BUDGET_TOKENS:-4000}
+      ADS_DOMAIN_URL: ${ADS_DOMAIN_URL:-}
+      ADS_DOMAIN_ALLOWED_HOSTS: ${ADS_DOMAIN_ALLOWED_HOSTS:-ads}
+      ADS_TOKEN_AUDIENCE: proba-ads
+      AUDIT_PUBLISHER: redis
+      AUDIT_STREAM: proba.audit.events
+      REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis:6379
+      AUDIT_CONTENT_ENABLED: "true"
+      AUDIT_CONTENT_MASK_PII: "true"
+      RUN_STORE_DIR: /app/data/runs
+    secrets:
+      - hub_service_jwks
+      - hub_assertion_jwks
+      - gateway_llm_private_key
+    depends_on:
+      redis:
+        condition: service_started
+    volumes:
+      - gateway_run_data:/app/data
+    tmpfs:
+      - /tmp
+    stop_grace_period: 90s
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+  redis:
+    image: redis:7-alpine@sha256:bb186d083732f669da90be8b0f975a37812b15e913465bb14d845db72a4e3e08
+    restart: unless-stopped
+    user: "999:1000"
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?set REDIS_PASSWORD}", "--appendonly", "yes", "--appendfsync", "everysec"]
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - gateway_redis_data:/data
+
+secrets:
+  hub_service_jwks:
+    file: ${HUB_SERVICE_JWKS_FILE:?set HUB_SERVICE_JWKS_FILE}
+  hub_assertion_jwks:
+    file: ${HUB_ASSERTION_JWKS_FILE:?set HUB_ASSERTION_JWKS_FILE}
+  gateway_llm_private_key:
+    file: ${GATEWAY_LLM_PRIVATE_KEY_FILE:?set GATEWAY_LLM_PRIVATE_KEY_FILE}
+
+volumes:
+  gateway_redis_data:
+  gateway_run_data:

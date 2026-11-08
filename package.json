@@ -1,0 +1,42 @@
+{
+  "name": "@smallseedlabs/proba-llm-gateway",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Proba LLM gateway: Hub calls here; this process owns context, the bounded loop and guarded tools; proba-llm is one model turn.",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc -p tsconfig.check.json --noEmit",
+    "lint": "eslint src --ext .ts --max-warnings 0",
+    "test": "NODE_ENV=test vitest run",
+    "start": "node dist/main.js"
+  },
+  "keywords": [
+    "proba",
+    "gateway",
+    "brain"
+  ],
+  "author": "Small Seed Labs",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@smallseedlabs/proba-protocol": "github:smallseedlabs/proba-protocol#v0.4.0",
+    "fastify": "^4.28.1",
+    "jose": "^5.10.0",
+    "pino": "^9.3.2",
+    "redis": "^4.7.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
+    "eslint": "^8.57.0",
+    "typescript": "^5.5.4",
+    "vitest": "^2.0.5"
+  }
+}
