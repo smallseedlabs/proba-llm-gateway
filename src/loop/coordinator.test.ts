@@ -501,6 +501,52 @@ describe('loop coordinator', () => {
     expect(llm.completeCalls).toBe(0);
     expect(ads.calls).toHaveLength(0);
   });
+
+  it('completes one LLM turn when maxIterations is 1', async () => {
+    const llm = new ScriptedLlmClient([testTurn({ message: { role: 'assistant', content: 'one' } })]);
+    const { coordinator: loop } = coordinator({
+      llm,
+      config: testConfig({ limits: { ...testConfig().limits, maxIterations: 1 } }),
+    });
+    const snapshot = await loop.start(testRunRequest(), testCaller());
+    expect(snapshot.status).toBe('completed');
+    expect(llm.completeCalls).toBe(1);
+    expect(snapshot.usage.llmCalls).toBe(1);
+  });
+
+  it('does not dispatch a second LLM after maxIterations=1 plus a tool pause', async () => {
+    const llm = new ScriptedLlmClient([
+      testToolTurn('page.attach_user_page', { url: 'https://example.com/x' }),
+      testTurn({ message: { role: 'assistant', content: 'should not run' } }),
+    ]);
+    const { coordinator: loop } = coordinator({
+      llm,
+      config: testConfig({ limits: { ...testConfig().limits, maxIterations: 1 } }),
+    });
+    const req = testRunRequest({ idempotencyKey: '19191919-1919-4191-8191-191919191919' });
+    const first = await loop.start(req, testCaller());
+    expect(first.status).toBe('awaiting_approval');
+    expect(llm.completeCalls).toBe(1);
+    const askId = (first.needs?.[0] as { askId: string }).askId;
+    const done = await loop.start({ ...req, resume: { askId, choice: 'approve' } }, testCaller());
+    expect(done.status).toBe('failed');
+    expect(done.error?.code).toBe('budget_exhausted');
+    expect(llm.completeCalls).toBe(1);
+  });
+
+  it('counts a failed LLM dispatch in usage and does not redispatch the same run', async () => {
+    const llm = new ScriptedLlmClient([]);
+    const { coordinator: loop } = coordinator({ llm });
+    const req = testRunRequest({ idempotencyKey: '20202020-2020-4202-8202-202020202020' });
+    const snapshot = await loop.start(req, testCaller());
+    expect(snapshot.status).toBe('failed');
+    expect(llm.completeCalls).toBe(1);
+    expect(snapshot.usage.llmCalls).toBe(1);
+    expect(snapshot.usage.cost).toEqual({ estimate: 'unknown' });
+    const again = await loop.start(req, testCaller());
+    expect(again.status).toBe('failed');
+    expect(llm.completeCalls).toBe(1);
+  });
 });
 
 async function waitFor(probe: () => Promise<boolean>, timeoutMs = 2000): Promise<void> {

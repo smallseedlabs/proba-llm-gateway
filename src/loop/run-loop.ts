@@ -107,7 +107,7 @@ export async function runBoundedLoop(
     const turn = await callLlm(deps, record, request, cancellation, usage, offeredToolFilter(preflight.offeredLimbs));
     if (turn.finishReason === 'tool_calls' && turn.message.toolCalls?.length) {
       try {
-        await dispatchTools(deps, record, request, turn.message.toolCalls, cancellation, usage);
+        await dispatchTools(deps, record, request, turn.message.toolCalls, cancellation, usage, turn.message);
       } catch (err) {
         if (err instanceof PreflightBlockedError) {
           return blockedSnapshot(deps, record, err.needs as CapabilityNeed[]);
@@ -240,6 +240,8 @@ async function callLlm(
     turn.state = ambiguous ? 'ambiguous' : 'failed';
     turn.errorCode = err instanceof LlmClientError ? err.code : 'provider_error';
     turn.errorMessage = err instanceof Error ? err.message : 'llm error';
+    usage.recordLlmDispatchFailure();
+    record.usage = usage.snapshot();
     record.events.push(
       ...llmTurnAuditEvents(
         request,
@@ -263,11 +265,19 @@ async function dispatchTools(
   request: HubRunRequest,
   toolCalls: LlmToolCall[],
   cancellation: Cancellation,
-  usage: RunUsageLedger
+  usage: RunUsageLedger,
+  assistant?: TurnResponse['message']
 ): Promise<void> {
   const alreadyAssistant = record.messages[record.messages.length - 1]?.role === 'assistant';
   if (!alreadyAssistant) {
-    record.messages.push({ role: 'assistant', content: '', toolCalls });
+    record.messages.push({
+      role: 'assistant',
+      content: assistant?.content ?? '',
+      toolCalls,
+      ...(assistant?.reasoningContent != null && assistant.reasoningContent !== ''
+        ? { reasoningContent: assistant.reasoningContent }
+        : {}),
+    });
   }
 
   for (let i = 0; i < toolCalls.length; i += 1) {

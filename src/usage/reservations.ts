@@ -77,10 +77,13 @@ export class RunUsageLedger implements UsageLedger {
     return { ...this.totals, cost: { ...this.totals.cost } };
   }
 
-  assertCanCallLlm(): void {
+  assertCanStartIteration(): void {
     if (this.iterations >= this.limits.maxIterations) {
       throw new BudgetExhaustedError(`iteration cap ${this.limits.maxIterations} reached`);
     }
+  }
+
+  assertCanCallLlm(): void {
     if (this.totals.llmCalls >= this.limits.maxLlmCalls) {
       throw new BudgetExhaustedError(`LLM call cap ${this.limits.maxLlmCalls} reached`);
     }
@@ -117,6 +120,14 @@ export class RunUsageLedger implements UsageLedger {
       cachedTokens: this.totals.cachedTokens + (response.usage.cachedTokens ?? 0),
       reasoningTokens: this.totals.reasoningTokens + (response.usage.reasoningTokens ?? 0),
       cost: addCost(this.totals.cost, response.cost),
+    };
+  }
+
+  recordLlmDispatchFailure(): void {
+    this.totals = {
+      ...this.totals,
+      llmCalls: this.totals.llmCalls + 1,
+      cost: { estimate: 'unknown' },
     };
   }
 
