@@ -14,6 +14,7 @@ import { RecordingAdsDomain, ScriptedContextPort, ScriptedLlmClient } from '../t
 import { testCaller, testRunRequest, testToolTurn, testTurn } from '../testing/fixtures.js';
 import { MemoryResearchStore } from '../research/memory-store.js';
 import { MemoryAnalyticsStore } from '../analytics/memory-store.js';
+import { MemoryActionOutcomeStore, MemoryActionPolicyStore } from '../action-policy/memory-store.js';
 import { FileResearchStore } from '../research/file-store.js';
 import { UnconfiguredResearchProvider } from '../research/unconfigured.js';
 import {
@@ -65,6 +66,8 @@ function loop(input: {
       ads,
       researchStore,
       analyticsStore: new MemoryAnalyticsStore('test'),
+      actionPolicyStore: new MemoryActionPolicyStore('test'),
+      actionOutcomeStore: new MemoryActionOutcomeStore('test'),
     }),
   };
 }

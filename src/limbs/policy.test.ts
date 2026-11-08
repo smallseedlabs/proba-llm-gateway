@@ -58,6 +58,13 @@ describe('limb policy and domain executor', () => {
     ]);
   });
 
+  it('catalogues ads.move_budget but does not allowlist cross-provider movement', () => {
+    expect(VERB_CATALOG.some((v) => v.name === 'ads.move_budget' && v.allowlisted === false)).toBe(true);
+    expect(
+      policy.evaluate('ads.move_budget', { fromPlatform: 'reddit', toPlatform: 'google', amount: 5 }, ctx)
+    ).toMatchObject({ allowed: false, code: 'allowlist' });
+  });
+
   it('rejects unknown verbs, extra provider ids, and malformed arguments', () => {
     expect(policy.evaluate('not.a.verb', {}, ctx)).toMatchObject({ allowed: false, code: 'unknown_verb' });
     expect(policy.evaluate('page.attach_user_page', {}, ctx)).toMatchObject({ allowed: false, code: 'schema' });

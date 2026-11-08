@@ -1,6 +1,7 @@
 /**
  * review_performance path: Context packet → deterministic evaluator.
  * Zero LLM complete calls, zero Ads POSTs, grantsSpend always false.
+ * Owner action policies (including auto_with_limits) are not authority here.
  */
 
 import type { CapabilityNeed } from '../types/preflight.js';

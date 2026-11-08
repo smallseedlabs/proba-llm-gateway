@@ -29,6 +29,7 @@ import type { LimbExecutor } from '../ports/limbs.js';
 import type { AdsDomainPort } from '../ports/ads.js';
 import type { ResearchArtifactStore } from '../ports/research.js';
 import type { AnalyticsDecisionStore } from '../analytics/store.js';
+import type { ActionOutcomeStore, ActionPolicyStore } from '../action-policy/store.js';
 import { LlmClientError, type LlmClient } from '../ports/llm-client.js';
 import type { PolicyEngine } from '../ports/policy.js';
 import type { RunRecord, RunStore } from '../ports/run-store.js';
@@ -56,6 +57,8 @@ export interface LoopCoordinatorDeps {
   ads: AdsDomainPort;
   researchStore: ResearchArtifactStore;
   analyticsStore: AnalyticsDecisionStore;
+  actionPolicyStore: ActionPolicyStore;
+  actionOutcomeStore: ActionOutcomeStore;
   assertionKeys?: JWTVerifyGetKey;
 }
 
@@ -254,6 +257,8 @@ export class LoopCoordinator {
       ads: this.deps.ads,
       researchStore: this.deps.researchStore,
       analyticsStore: this.deps.analyticsStore,
+      actionPolicyStore: this.deps.actionPolicyStore,
+      actionOutcomeStore: this.deps.actionOutcomeStore,
       persist: (row: RunRecord) => this.deps.runs.put(row),
       relay: (row: RunRecord) => this.relay(row),
     };
