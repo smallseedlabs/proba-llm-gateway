@@ -91,4 +91,22 @@ describe('usage reservations', () => {
       })
     ).toThrow(/not configured/);
   });
+
+  it('lets maxIterations=1 record its first iteration and still call the LLM', () => {
+    const ledger = new RunUsageLedger(limits({ maxIterations: 1, maxLlmCalls: 1 }));
+    expect(() => ledger.assertCanStartIteration()).not.toThrow();
+    expect(ledger.recordIteration()).toBe(1);
+    expect(() => ledger.assertCanCallLlm()).not.toThrow();
+    expect(() => ledger.assertCanStartIteration()).toThrow(/iteration cap 1/);
+  });
+
+  it('counts a failed dispatch toward llmCalls without treating unknown cost as zero', () => {
+    const ledger = new RunUsageLedger(limits({ maxLlmCalls: 2, maxCostUsd: 1 }));
+    ledger.recordLlmDispatchFailure();
+    expect(ledger.snapshot().llmCalls).toBe(1);
+    expect(ledger.snapshot().cost).toEqual({ estimate: 'unknown' });
+    expect(ledger.snapshot().cost.estimate).not.toBe(0);
+    expect(() => ledger.assertCanCallLlm()).toThrow(BudgetExhaustedError);
+    expect(() => ledger.assertCanCallLlm()).toThrow(/unknown/);
+  });
 });

@@ -32,6 +32,7 @@ export const llmMessageSchema = z
     content: z.string(),
     toolCallId: z.string().min(1).max(128).optional(),
     toolCalls: z.array(llmToolCallSchema).max(16).optional(),
+    reasoningContent: z.string().max(200_000).nullable().optional(),
   })
   .strict();
 
@@ -94,6 +95,7 @@ export const turnResponseSchema = z
         role: z.literal('assistant'),
         content: z.string().nullable(),
         toolCalls: z.array(llmToolCallSchema).optional(),
+        reasoningContent: z.string().max(200_000).nullable().optional(),
       })
       .strict(),
     finishReason: z.enum(['stop', 'tool_calls', 'length', 'unknown']),

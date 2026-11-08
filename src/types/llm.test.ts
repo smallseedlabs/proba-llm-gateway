@@ -25,4 +25,17 @@ describe('proba-llm complete contract', () => {
     expect(parsed.success).toBe(true);
     if (parsed.success) expect(parsed.data.cost).toEqual({ estimate: 'unknown' });
   });
+
+  it('accepts optional reasoningContent without requiring thinking to be enabled', () => {
+    const parsed = turnResponseSchema.safeParse({
+      message: { role: 'assistant', content: 'hi', reasoningContent: 'because' },
+      finishReason: 'stop',
+      model: 'test-model',
+      provider: 'deepseek',
+      usage: {},
+      latencyMs: 12,
+      cost: { estimate: 'unknown' },
+    });
+    expect(parsed.success).toBe(true);
+  });
 });

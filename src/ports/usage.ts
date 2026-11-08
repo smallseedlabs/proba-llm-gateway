@@ -24,11 +24,18 @@ export interface UsageLimits {
 
 export interface UsageLedger {
   snapshot(): UsageTotals;
+  /**
+   * Throws if another loop iteration cannot start. Uses pre-increment
+   * semantics so maxIterations=1 can still complete its first LLM turn.
+   */
+  assertCanStartIteration(): void;
   /** Throws BudgetExhaustedError if the next LLM call cannot be proven in budget. */
   assertCanCallLlm(): void;
   /** Throws if another tool call would exceed the tool count. */
   assertCanCallTool(): void;
   recordLlmTurn(response: TurnResponse): void;
+  /** Count a dispatched LLM attempt that did not return a usable turn. */
+  recordLlmDispatchFailure(): void;
   recordToolCall(): void;
   recordIteration(): number;
   /**

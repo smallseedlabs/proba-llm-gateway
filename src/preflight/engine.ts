@@ -255,8 +255,10 @@ export async function runPreflight(
   let runEligible = true;
   let runMessage: string | undefined;
   try {
-    if (phase === 'brain') usage.assertCanCallLlm();
-    else usage.assertCanCallTool();
+    if (phase === 'brain') {
+      usage.assertCanStartIteration();
+      usage.assertCanCallLlm();
+    } else usage.assertCanCallTool();
   } catch (err) {
     runEligible = false;
     runMessage = err instanceof Error ? err.message : 'run budget exhausted';
