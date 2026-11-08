@@ -56,7 +56,7 @@ Default product UX is **not** blanket denial: with `GATEWAY_MAX_COST_USD` unset,
 
 ## 4. CURRENT VERIFIED — gateway (`proba-llm-gateway`)
 
-Process: Node 20, Fastify, port **3700**. Restart required for env. Production refuses vendor LLM keys in this process (`DEEPSEEK_API_KEY` / `LLM_API_KEY`). `INGRESS_PUBLIC=true` refused. **No GitHub Actions** in this repo.
+Process: Node 20, Fastify, port **3700**. Restart required for env. Production refuses vendor LLM keys in this process (`DEEPSEEK_API_KEY` / `LLM_API_KEY`). `INGRESS_PUBLIC=true` refused. GitHub Actions: lint, typecheck, tests (research guards required), build, Docker, compose security, gitleaks, CodeQL, production npm audit.
 
 | Key / group | Meaning / units | Code default | Req | Validation | Scope | Unknown / fail |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -161,7 +161,7 @@ Gateway requires `goalId` + `threadId` + act-as (non-test) and a successful `/re
 
 ## 9. CURRENT VERIFIED — limitations (constraints, not wishes)
 
-1. **Gateway has no CI** (no `.github/`). Tests in this PR are **local only**.
+1. **Gateway CI** (`.github/workflows/ci.yml` + `security.yml`): lint, typecheck, tests with required research-guard names, build, Docker image, compose loopback/`RESEARCH_HTTP_FETCH=false`, gitleaks, CodeQL, production npm audit (high+ vs documented fastify 4 / zod 3 baseline). CI does not enable live crawl or paid providers.
 2. **Hub and LLM publication refusals** from earlier tasks remain final; this run does not retry them. Hub `gateway_runs` durability may exist on a Hub branch that is not merged from here.
 3. **`GET /v1/quota` and `GET /v1/pricing` do not exist on proba-llm.** Gateway records `unknown`. Official DeepSeek list prices (below) are **not** loaded into `PRICE_*`.
 4. **Paid path is opt-in** (`GATEWAY_URL`). Default Hub is mock brain. Enabling gateway with keys **can** spend at the vendor.
