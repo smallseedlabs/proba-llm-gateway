@@ -14,6 +14,8 @@ import { testConfig } from '../testing/config.js';
 import { RecordingAdsDomain, ScriptedContextPort, ScriptedLlmClient } from '../testing/doubles.js';
 import { testRunRequest, testTurn } from '../testing/fixtures.js';
 import { createLogger } from '../logger.js';
+import { MemoryResearchStore } from '../research/memory-store.js';
+import { UnconfiguredResearchProvider } from '../research/unconfigured.js';
 
 describe('HTTP gateway', () => {
   it('serves health without auth and refuses unauthenticated runs', async () => {
@@ -22,19 +24,22 @@ describe('HTTP gateway', () => {
     const llm = new ScriptedLlmClient([testTurn()]);
     const ads = new RecordingAdsDomain();
     const audit = new MemoryAuditPublisher();
+    const clock = new SystemClock();
+    const researchStore = new MemoryResearchStore('test');
     const app = await buildApp({
       config,
       coordinator: new LoopCoordinator({
         config,
-        clock: new SystemClock(),
+        clock,
         audit,
         runs: new MemoryRunStore('test'),
         llm,
         context: new ScriptedContextPort(),
         policy: new CatalogPolicyEngine(),
         approval: new FailClosedApprovalGate(),
-        tools: new DomainLimbExecutor(ads),
+        tools: new DomainLimbExecutor(ads, { provider: new UnconfiguredResearchProvider(), store: researchStore, clock }),
         ads,
+        researchStore,
       }),
       auth: new ServiceTokenAuth({
         keys: signer.keys,
@@ -71,19 +76,23 @@ describe('HTTP gateway', () => {
     const signer = await createTestSigner();
     const config = testConfig();
     const audit = new MemoryAuditPublisher();
+    const clock = new SystemClock();
+    const researchStore = new MemoryResearchStore('test');
+    const ads = new RecordingAdsDomain();
     const app = await buildApp({
       config,
       coordinator: new LoopCoordinator({
         config,
-        clock: new SystemClock(),
+        clock,
         audit,
         runs: new MemoryRunStore('test'),
         llm: new ScriptedLlmClient([testTurn()]),
         context: new ScriptedContextPort(),
         policy: new CatalogPolicyEngine(),
         approval: new FailClosedApprovalGate(),
-        tools: new DomainLimbExecutor(new RecordingAdsDomain()),
-        ads: new RecordingAdsDomain(),
+        tools: new DomainLimbExecutor(ads, { provider: new UnconfiguredResearchProvider(), store: researchStore, clock }),
+        ads,
+        researchStore,
       }),
       auth: new ServiceTokenAuth({
         keys: signer.keys,

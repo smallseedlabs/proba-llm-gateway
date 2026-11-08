@@ -19,6 +19,7 @@ export function requestFingerprint(request: HubRunRequest): string {
       payload: request.command.payload,
     },
     budget: request.budget ?? null,
+    userSuppliedInput: request.userSuppliedInput ?? null,
   });
   return createHash('sha256').update(canonical).digest('hex');
 }

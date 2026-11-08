@@ -27,6 +27,7 @@ import type { Clock } from '../ports/clock.js';
 import type { ContextPort } from '../ports/context.js';
 import type { LimbExecutor } from '../ports/limbs.js';
 import type { AdsDomainPort } from '../ports/ads.js';
+import type { ResearchArtifactStore } from '../ports/research.js';
 import { LlmClientError, type LlmClient } from '../ports/llm-client.js';
 import type { PolicyEngine } from '../ports/policy.js';
 import type { RunRecord, RunStore } from '../ports/run-store.js';
@@ -52,6 +53,7 @@ export interface LoopCoordinatorDeps {
   approval: ApprovalGate;
   tools: LimbExecutor;
   ads: AdsDomainPort;
+  researchStore: ResearchArtifactStore;
   assertionKeys?: JWTVerifyGetKey;
 }
 
@@ -248,6 +250,7 @@ export class LoopCoordinator {
       approval: this.deps.approval,
       tools: this.deps.tools,
       ads: this.deps.ads,
+      researchStore: this.deps.researchStore,
       persist: (row: RunRecord) => this.deps.runs.put(row),
       relay: (row: RunRecord) => this.relay(row),
     };

@@ -30,6 +30,40 @@ describe('prerequisite graph', () => {
     expect(order.indexOf('ads.service')).toBeLessThan(order.indexOf('llm.quota'));
   });
 
+  it('requires research.accepted only at mutate for ads.create_campaign', () => {
+    const brain = operationManifest({
+      phase: 'brain',
+      intent: {
+        kind: 'ads_mutate',
+        requiresAds: true,
+        requiresPage: false,
+        verb: 'ads.create_campaign',
+        mappingRequired: false,
+        spendClass: 'spend_increase',
+      },
+    });
+    expect(brain.requires).not.toContain('research.accepted');
+    const mutate = operationManifest({
+      phase: 'mutate',
+      intent: {
+        kind: 'ads_mutate',
+        requiresAds: true,
+        requiresPage: false,
+        verb: 'ads.create_campaign',
+        mappingRequired: false,
+        spendClass: 'spend_increase',
+      },
+    });
+    expect(mutate.requires).toContain('research.accepted');
+    expect(mutate.requires).toContain('ads.billing');
+    const research = operationManifest({
+      phase: 'mutate',
+      intent: { kind: 'research_mutate', requiresAds: false, requiresPage: false, spendClass: 'none' },
+    });
+    expect(research.requires).not.toContain('ads.service');
+    expect(research.requires).toContain('limb.manifest');
+  });
+
   it('omits ads.billing for pause/safety while keeping auth and connection', () => {
     const manifest = operationManifest({
       phase: 'mutate',

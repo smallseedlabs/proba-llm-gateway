@@ -17,6 +17,45 @@ function verb(def: VerbDefinition): VerbDefinition {
 
 export const VERB_CATALOG: readonly VerbDefinition[] = [
   verb({
+    limb: 'research',
+    verb: 'gather',
+    name: 'research.gather',
+    description:
+      'Fetch source-backed research for the Hub userSuppliedInput landing URL (findings, assumptions, unknowns). Context packets are not a research source. Unconfigured providers fail closed and do not invent citations.',
+    parameters: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        url: { type: 'string', minLength: 1, maxLength: 2048 },
+      },
+    },
+    risk: 'medium',
+    sideEffecting: true,
+    requiresApproval: false,
+    allowlisted: true,
+  }),
+  verb({
+    limb: 'research',
+    verb: 'accept',
+    name: 'research.accept',
+    description:
+      'Hub-mediated acceptance of the current research artifact version. Not offered to the model. Edits invalidate acceptance.',
+    parameters: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['artifactId', 'version', 'inputRevision'],
+      properties: {
+        artifactId: { type: 'string', minLength: 1, maxLength: 64 },
+        version: { type: 'number' },
+        inputRevision: { type: 'string', minLength: 1, maxLength: 128 },
+      },
+    },
+    risk: 'high',
+    sideEffecting: true,
+    requiresApproval: true,
+    allowlisted: true,
+  }),
+  verb({
     limb: 'page',
     verb: 'attach_user_page',
     name: 'page.attach_user_page',
@@ -156,7 +195,7 @@ export function verbByName(name: string): VerbDefinition | undefined {
 }
 
 export function llmToolDefinitions(): Array<{ name: string; description: string; parameters: Record<string, unknown> }> {
-  return VERB_CATALOG.filter((v) => v.allowlisted).map((v) => ({
+  return VERB_CATALOG.filter((v) => v.allowlisted && v.name !== 'research.accept').map((v) => ({
     name: v.name,
     description: v.description,
     parameters: v.parameters,

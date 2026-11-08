@@ -8,6 +8,7 @@ export type {
   LimitsConfig,
   ListenConfig,
   LlmClientConfig,
+  ResearchConfig,
   RuntimeEnv,
 } from './config.js';
 export { GATEWAY_SERVICE_NAME } from './config.js';

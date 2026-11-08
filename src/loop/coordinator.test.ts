@@ -22,6 +22,10 @@ import type { LlmClient } from '../ports/llm-client.js';
 import type { ContextPort } from '../ports/context.js';
 import type { LimbExecutor } from '../ports/limbs.js';
 import type { AdsDomainPort } from '../ports/ads.js';
+import { MemoryResearchStore } from '../research/memory-store.js';
+import { seedAcceptedResearch, TEST_LANDING_URL, userLanding } from '../testing/research.js';
+import type { ResearchArtifactStore, ResearchProviderPort } from '../ports/research.js';
+import { SourcedResearchProvider } from '../testing/research.js';
 
 function coordinator(input: {
   llm: LlmClient;
@@ -29,6 +33,8 @@ function coordinator(input: {
   tools?: LimbExecutor;
   ads?: AdsDomainPort;
   runs?: RunStore;
+  researchStore?: ResearchArtifactStore;
+  research?: ResearchProviderPort;
   audit?: MemoryAuditPublisher;
   config?: ReturnType<typeof testConfig>;
   clock?: Clock;
@@ -36,32 +42,41 @@ function coordinator(input: {
   const ads = input.ads ?? new RecordingAdsDomain();
   const audit = input.audit ?? new MemoryAuditPublisher();
   const runs = input.runs ?? new MemoryRunStore('test');
+  const researchStore = input.researchStore ?? new MemoryResearchStore('test');
+  const research = input.research ?? new SourcedResearchProvider();
+  const clock = input.clock ?? new SystemClock();
   return {
     ads,
     audit,
     runs,
+    researchStore,
     coordinator: new LoopCoordinator({
       config: input.config ?? testConfig(),
-      clock: input.clock ?? new SystemClock(),
+      clock,
       audit,
       runs,
       llm: input.llm,
       context: input.context ?? new ScriptedContextPort(),
       policy: new CatalogPolicyEngine(),
       approval: new FailClosedApprovalGate(),
-      tools: input.tools ?? new DomainLimbExecutor(ads),
+      tools: input.tools ?? new DomainLimbExecutor(ads, { provider: research, store: researchStore, clock }),
       ads,
+      researchStore,
     }),
   };
 }
 
 const createArgs = {
   name: 'Spring',
-  landingPageUrl: 'https://example.com/offer',
+  landingPageUrl: TEST_LANDING_URL,
   dailyBudget: 10,
   currency: 'USD',
   platform: 'reddit',
 };
+
+function landingReq(overrides: Parameters<typeof testRunRequest>[0] = {}): ReturnType<typeof testRunRequest> {
+  return testRunRequest({ userSuppliedInput: userLanding(), ...overrides });
+}
 
 describe('loop coordinator', () => {
   it('rejects a workspace claim that does not match the body', async () => {
@@ -114,9 +129,10 @@ describe('loop coordinator', () => {
       testTurn({ message: { role: 'assistant', content: 'campaign created' } }),
     ]);
     const ads = new RecordingAdsDomain();
-    const { coordinator: loop, runs } = coordinator({ llm, ads });
+    const { coordinator: loop, runs, researchStore } = coordinator({ llm, ads });
+    await seedAcceptedResearch(researchStore);
     const idempotencyKey = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
-    const req = testRunRequest({ idempotencyKey });
+    const req = landingReq({ idempotencyKey });
     const first = await loop.start(req, testCaller());
     expect(first.status).toBe('awaiting_approval');
     expect(ads.calls).toHaveLength(0);
@@ -126,7 +142,7 @@ describe('loop coordinator', () => {
     expect(need?.askId).toMatch(/^[0-9a-f-]{36}$/i);
 
     const resumed = await loop.start(
-      testRunRequest({
+      landingReq({
         idempotencyKey,
         resume: { askId: need!.askId!, choice: 'approve' },
       }),
@@ -145,12 +161,13 @@ describe('loop coordinator', () => {
       testTurn({ message: { role: 'assistant', content: 'ok' } }),
     ]);
     const ads = new RecordingAdsDomain();
-    const { coordinator: loop } = coordinator({ llm, ads });
+    const { coordinator: loop, researchStore } = coordinator({ llm, ads });
+    await seedAcceptedResearch(researchStore);
     const idempotencyKey = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
-    const first = await loop.start(testRunRequest({ idempotencyKey }), testCaller());
+    const first = await loop.start(landingReq({ idempotencyKey }), testCaller());
     const askId = (first.needs?.[0] as { askId: string }).askId;
     await loop.start(
-      testRunRequest({
+      landingReq({
         idempotencyKey,
         resume: { askId, choice: 'approve', values: { dailyBudget: 999, providerCampaignId: 'invented' } },
       }),
@@ -162,14 +179,15 @@ describe('loop coordinator', () => {
 
   it('fails closed when the Ads domain is unconfigured', async () => {
     const llm = new ScriptedLlmClient([testToolTurn('ads.create_campaign', createArgs)]);
-    const { coordinator: loop } = coordinator({
+    const { coordinator: loop, researchStore } = coordinator({
       llm,
       ads: new UnconfiguredAdsDomain(),
     });
-    const first = await loop.start(testRunRequest({ idempotencyKey: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc' }), testCaller());
+    await seedAcceptedResearch(researchStore);
+    const first = await loop.start(landingReq({ idempotencyKey: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc' }), testCaller());
     const askId = (first.needs?.[0] as { askId: string }).askId;
     const done = await loop.start(
-      testRunRequest({
+      landingReq({
         idempotencyKey: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
         resume: { askId, choice: 'approve' },
       }),
@@ -296,7 +314,7 @@ describe('loop coordinator', () => {
       const firstStore = new FileRunStore(dir);
       const { coordinator: loop } = coordinator({ llm, runs: firstStore });
       const idempotencyKey = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
-      const snapshot = await loop.start(testRunRequest({ idempotencyKey }), testCaller());
+      const snapshot = await loop.start(landingReq({ idempotencyKey }), testCaller());
       expect(snapshot.status).toBe('awaiting_approval');
       await firstStore.close();
       const restarted = new FileRunStore(dir);
@@ -547,11 +565,12 @@ describe('loop coordinator', () => {
     const createAds = new RecordingAdsDomain();
     createAds.billing = ineligible;
     const createLoop = coordinator({ llm: createLlm, ads: createAds });
+    await seedAcceptedResearch(createLoop.researchStore);
     const createKey = '18181818-1818-4181-8181-181818181818';
-    const firstCreate = await createLoop.coordinator.start(testRunRequest({ idempotencyKey: createKey }), testCaller());
+    const firstCreate = await createLoop.coordinator.start(landingReq({ idempotencyKey: createKey }), testCaller());
     const createAsk = (firstCreate.needs?.[0] as { askId: string }).askId;
     const created = await createLoop.coordinator.start(
-      testRunRequest({ idempotencyKey: createKey, resume: { askId: createAsk, choice: 'approve' } }),
+      landingReq({ idempotencyKey: createKey, resume: { askId: createAsk, choice: 'approve' } }),
       testCaller()
     );
     expect(created.status).toBe('blocked');

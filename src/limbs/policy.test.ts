@@ -6,8 +6,16 @@ import { ToolRefusedError } from '../errors.js';
 import { FailClosedApprovalGate } from '../adapters/fail-closed-approval.js';
 import { DomainLimbExecutor } from './dispatcher.js';
 import { UnconfiguredAdsDomain } from '../domains/ads/unconfigured.js';
+import { MemoryResearchStore } from '../research/memory-store.js';
+import { UnconfiguredResearchProvider } from '../research/unconfigured.js';
+import { SystemClock } from '../adapters/system-clock.js';
+import { seedAcceptedResearch } from '../testing/research.js';
 
-const ctx = { workspaceId: 'seedbed', userId: '11111111-1111-4111-8111-111111111111' };
+const ctx = {
+  workspaceId: 'seedbed',
+  userId: '11111111-1111-4111-8111-111111111111',
+  userSuppliedInput: { landingPageUrl: 'https://example.com/offer' },
+};
 
 const createArgs = {
   name: 'Spring',
@@ -25,6 +33,18 @@ describe('limb policy and domain executor', () => {
     expect(policy.evaluate('page.generate_page', {}, ctx)).toMatchObject({ allowed: false, code: 'allowlist' });
     expect(policy.evaluate('analytics.compare_metrics', {}, ctx)).toMatchObject({ allowed: false, code: 'allowlist' });
     expect(policy.evaluate('ads.create_campaign', createArgs, ctx).allowed).toBe(true);
+    expect(policy.evaluate('research.gather', { url: createArgs.landingPageUrl }, ctx).allowed).toBe(true);
+    expect(policy.evaluate('research.accept', { artifactId: 'x', version: 1, inputRevision: 'y' }, ctx)).toMatchObject({
+      allowed: false,
+      code: 'allowlist',
+    });
+    expect(
+      policy.evaluate('ads.create_campaign', { ...createArgs, landingPageUrl: 'https://evil.example/x' }, ctx)
+    ).toMatchObject({ allowed: false, code: 'user_input' });
+    expect(policy.evaluate('ads.create_campaign', createArgs, { workspaceId: 'seedbed', userId: ctx.userId })).toMatchObject({
+      allowed: false,
+      code: 'user_input',
+    });
     expect(policy.evaluate('ads.update_campaign', { probaCampaignId: 'proba-1' }, ctx).allowed).toBe(true);
     expect(policy.evaluate('ads.propose_campaign', { platform: 'reddit' }, ctx)).toMatchObject({
       allowed: false,
@@ -66,7 +86,13 @@ describe('limb policy and domain executor', () => {
   });
 
   it('fails closed when Ads is unconfigured rather than fabricating success', async () => {
-    const executor = new DomainLimbExecutor(new UnconfiguredAdsDomain());
+    const store = new MemoryResearchStore('test');
+    await seedAcceptedResearch(store);
+    const executor = new DomainLimbExecutor(new UnconfiguredAdsDomain(), {
+      provider: new UnconfiguredResearchProvider(),
+      store,
+      clock: new SystemClock(),
+    });
     const verb = VERB_CATALOG.find((v) => v.name === 'ads.create_campaign');
     if (!verb) throw new Error('catalog missing create_campaign');
     await expect(
@@ -75,6 +101,8 @@ describe('limb policy and domain executor', () => {
         {
           workspaceId: 'seedbed',
           userId: ctx.userId,
+          goalId: '11111111-1111-4111-8111-111111111113',
+          threadId: '11111111-1111-4111-8111-111111111114',
           traceId: '11111111-1111-4111-8111-111111111111',
           signal: new AbortController().signal,
           approval: {

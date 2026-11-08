@@ -12,6 +12,11 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ NODE_ENV: 'test', INGRESS_PUBLIC: 'true' })).toThrow(/no public ingress/);
   });
 
+  it('defaults research HTTP fetch to off so citations cannot be invented', () => {
+    expect(loadConfig({ NODE_ENV: 'test' }).research.httpFetchEnabled).toBe(false);
+    expect(loadConfig({ NODE_ENV: 'test', RESEARCH_HTTP_FETCH: 'true' }).research.httpFetchEnabled).toBe(true);
+  });
+
   it('defaults unknown quota to allow_with_run_budget and rejects an invalid policy', () => {
     expect(loadConfig({ NODE_ENV: 'test' }).llm.quotaUnknownPolicy).toBe('allow_with_run_budget');
     expect(loadConfig({ NODE_ENV: 'test', LLM_QUOTA_UNKNOWN_POLICY: 'refuse' }).llm.quotaUnknownPolicy).toBe('refuse');

@@ -37,6 +37,12 @@ export function testConfig(overrides: Partial<GatewayServiceConfig> = {}): Gatew
       billingRequirement: 'billing_eligibility',
       preflightFreshnessMs: 15_000,
     },
+    research: {
+      httpFetchEnabled: false,
+      timeoutMs: 1000,
+      maxBytes: 65_536,
+      storeDir: '',
+    },
     limits: {
       maxRequestBytes: 262_144,
       rateLimitMax: 60,

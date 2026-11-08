@@ -28,6 +28,10 @@ import type {
   RunPhase,
 } from '../types/preflight.js';
 import type { RunUsageLedger } from '../usage/reservations.js';
+import type { ResearchArtifactStore } from '../ports/research.js';
+import { researchAcceptedNeed } from '../research/artifact.js';
+import { lookupCurrentArtifact } from '../research/gather.js';
+import { readUserSuppliedLanding } from '../research/input.js';
 import { resolveOperationIntent } from './intent.js';
 import { evaluateBillingLock } from './locked-policy.js';
 import {
@@ -44,6 +48,7 @@ export interface PreflightDeps {
   ads: AdsDomainPort;
   llm: LlmClient;
   context: ContextPort;
+  researchStore?: ResearchArtifactStore;
 }
 
 export interface RunPreflightOptions {
@@ -51,7 +56,7 @@ export interface RunPreflightOptions {
   mutate?: { verb: string; args: Record<string, unknown> };
 }
 
-const NEVER_REUSE: ReadonlySet<PrerequisiteId> = new Set(['intent', 'auth.workspace', 'run.budget']);
+const NEVER_REUSE: ReadonlySet<PrerequisiteId> = new Set(['intent', 'auth.workspace', 'run.budget', 'research.accepted']);
 
 function isoPlus(clock: Clock, ms: number): string {
   return new Date(clock.now().getTime() + ms).toISOString();
@@ -128,6 +133,9 @@ export function invalidateAdsRemoteEvidence(evidence: readonly PrerequisiteEvide
 function mutateIntent(mutate: { verb: string; args: Record<string, unknown> }): OperationIntent {
   if (mutate.verb.startsWith('page.')) {
     return { kind: 'page_mutate', requiresPage: true, requiresAds: false, spendClass: 'none' };
+  }
+  if (mutate.verb.startsWith('research.')) {
+    return { kind: 'research_mutate', requiresAds: false, requiresPage: false, spendClass: 'none' };
   }
   const verb = mutate.verb;
   const spendClass = spendClassForVerb(verb, mutate.args);
@@ -426,7 +434,12 @@ export async function runPreflight(
     }
 
     if (id === 'limb.manifest') {
-      const limb = intent.kind === 'page_mutate' || (intent.kind === 'read_or_plan' && intent.requiresPage) ? 'page' : 'ads';
+      const limb =
+        intent.kind === 'research_mutate'
+          ? 'research'
+          : intent.kind === 'page_mutate' || (intent.kind === 'read_or_plan' && intent.requiresPage)
+            ? 'page'
+            : 'ads';
       const requiredLimb = intent.kind === 'ads_mutate' ? 'ads' : limb;
       if (!limbEnabled(requiredLimb)) {
         needs.push({
@@ -509,6 +522,42 @@ export async function runPreflight(
       continue;
     }
 
+    if (id === 'research.accepted') {
+      const landingPageUrl = readUserSuppliedLanding(request.userSuppliedInput);
+      const mutateUrl =
+        options.mutate?.verb === 'ads.create_campaign'
+          ? readUserSuppliedLanding({ landingPageUrl: String(options.mutate.args.landingPageUrl ?? '') }) ?? landingPageUrl
+          : landingPageUrl;
+      const binding =
+        request.goalId && request.threadId
+          ? {
+              workspaceId: request.workspaceId,
+              userId: request.userId,
+              goalId: request.goalId,
+              threadId: request.threadId,
+            }
+          : undefined;
+      if (!binding) {
+        needs.push({
+          type: 'capability',
+          capability: 'research.accepted',
+          state: 'missing',
+          message: 'goalId and threadId are required to bind a research review artifact',
+        });
+        remember(id, 'blocked', 'research binding missing', false);
+        break;
+      }
+      const artifact = deps.researchStore ? await lookupCurrentArtifact(deps.researchStore, binding, mutateUrl) : undefined;
+      const need = researchAcceptedNeed(artifact, mutateUrl);
+      if (need) {
+        needs.push(need);
+        remember(id, 'blocked', need.message, false);
+        break;
+      }
+      remember(id, 'ready', 'accepted source-backed research artifact matches the current user-supplied URL revision', false);
+      continue;
+    }
+
     if (id === 'ads.service' || id === 'ads.connection' || id === 'ads.permissions' || id === 'ads.blueprint' || id === 'ads.billing') {
       const report = await ensureAdsReport();
       let nodeNeed: CapabilityNeed | undefined;
@@ -540,9 +589,17 @@ export async function runPreflight(
     remember('ads.billing', 'relaxed', BILLING_RELAXED_REASON, false);
   }
 
-  const offeredLimbs = ['page', ...(intent.kind === 'ads_mutate' ? (adsReport?.service.state === 'ready' ? (['ads'] as const) : []) : limbEnabled('ads') ? (['ads'] as const) : [])].filter(
-    (name, index, all) => all.indexOf(name) === index && limbEnabled(name)
-  );
+  const offeredLimbs = [
+    'page',
+    'research',
+    ...(intent.kind === 'ads_mutate'
+      ? adsReport?.service.state === 'ready'
+        ? (['ads'] as const)
+        : []
+      : limbEnabled('ads')
+        ? (['ads'] as const)
+        : []),
+  ].filter((name, index, all) => all.indexOf(name) === index && limbEnabled(name));
 
   return {
     allowed: needs.length === 0,

@@ -9,7 +9,7 @@ import { z } from 'zod';
  * First marketing supports a user-provided page URL. Page generation is later
  * and the verb is catalogued but not allowlisted.
  */
-export const LIMB_IDS = ['page', 'ads', 'analytics'] as const;
+export const LIMB_IDS = ['page', 'ads', 'analytics', 'research'] as const;
 export type LimbId = (typeof LIMB_IDS)[number];
 
 export const AD_PLATFORMS = ['reddit', 'microsoft', 'google', 'meta'] as const;
