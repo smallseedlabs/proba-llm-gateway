@@ -43,6 +43,16 @@ export function testConfig(overrides: Partial<GatewayServiceConfig> = {}): Gatew
       maxBytes: 65_536,
       storeDir: '',
     },
+    analytics: {
+      maxAgeMs: 6 * 60 * 60 * 1000,
+      minImpressions: 100,
+      minObservations: 12,
+      minWindowCoverage: 0.5,
+      cooldownMs: 6 * 60 * 60 * 1000,
+      maxProposalDailyBudget: null,
+      maxProposalDecreasePct: 0.5,
+      storeDir: '',
+    },
     limits: {
       maxRequestBytes: 262_144,
       rateLimitMax: 60,

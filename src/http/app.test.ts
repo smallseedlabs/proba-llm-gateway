@@ -15,6 +15,7 @@ import { RecordingAdsDomain, ScriptedContextPort, ScriptedLlmClient } from '../t
 import { testRunRequest, testTurn } from '../testing/fixtures.js';
 import { createLogger } from '../logger.js';
 import { MemoryResearchStore } from '../research/memory-store.js';
+import { MemoryAnalyticsStore } from '../analytics/memory-store.js';
 import { UnconfiguredResearchProvider } from '../research/unconfigured.js';
 
 describe('HTTP gateway', () => {
@@ -40,6 +41,7 @@ describe('HTTP gateway', () => {
         tools: new DomainLimbExecutor(ads, { provider: new UnconfiguredResearchProvider(), store: researchStore, clock }),
         ads,
         researchStore,
+        analyticsStore: new MemoryAnalyticsStore('test'),
       }),
       auth: new ServiceTokenAuth({
         keys: signer.keys,
@@ -93,6 +95,7 @@ describe('HTTP gateway', () => {
         tools: new DomainLimbExecutor(ads, { provider: new UnconfiguredResearchProvider(), store: researchStore, clock }),
         ads,
         researchStore,
+        analyticsStore: new MemoryAnalyticsStore('test'),
       }),
       auth: new ServiceTokenAuth({
         keys: signer.keys,
