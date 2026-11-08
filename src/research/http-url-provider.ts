@@ -115,9 +115,78 @@ export class HttpUrlResearchProvider implements ResearchProviderPort {
   }
 }
 
+function isTagNameBoundary(char: string | undefined): boolean {
+  return char === undefined || char === '>' || char === '/' || char === ' ' || char === '\t' || char === '\n' || char === '\r' || char === '\f';
+}
+
+function isHtmlWhitespace(char: string | undefined): boolean {
+  return char === ' ' || char === '\t' || char === '\n' || char === '\r' || char === '\f';
+}
+
+function indexOfOpenTag(html: string, tag: string, from = 0): number {
+  const needle = `<${tag.toLowerCase()}`;
+  const lower = html.toLowerCase();
+  let searchFrom = from;
+  while (searchFrom < html.length) {
+    const at = lower.indexOf(needle, searchFrom);
+    if (at < 0) return -1;
+    if (isTagNameBoundary(html[at + needle.length])) return at;
+    searchFrom = at + 1;
+  }
+  return -1;
+}
+
+/** Start index of `</tag` whose `>` may be preceded by whitespace (`</script >`). */
+function indexOfCloseTag(html: string, tag: string, from: number): { start: number; after: number } | undefined {
+  const needle = `</${tag.toLowerCase()}`;
+  const lower = html.toLowerCase();
+  let searchFrom = from;
+  while (searchFrom < html.length) {
+    const at = lower.indexOf(needle, searchFrom);
+    if (at < 0) return undefined;
+    let i = at + needle.length;
+    while (i < html.length && isHtmlWhitespace(html[i])) i += 1;
+    if (html[i] === '>') return { start: at, after: i + 1 };
+    searchFrom = at + 1;
+  }
+  return undefined;
+}
+
+/**
+ * Drop a named element's body from untrusted HTML before excerpting.
+ *
+ * Closing tags may include whitespace before `>` (`</script >`, `</style\t>`).
+ * A replace() of `</script>` without optional whitespace is not a filter
+ * (CodeQL js/bad-tag-filter). Unclosed elements drop the remainder (fail
+ * closed). This does not make the excerpt trusted.
+ */
+function dropElementBodies(html: string, tag: string): string {
+  let remaining = html;
+  for (let n = 0; n < 32; n += 1) {
+    const start = indexOfOpenTag(remaining, tag);
+    if (start < 0) return remaining;
+    const gt = remaining.indexOf('>', start);
+    if (gt < 0) return remaining.slice(0, start);
+    const close = indexOfCloseTag(remaining, tag, gt + 1);
+    if (!close) return remaining.slice(0, start);
+    remaining = `${remaining.slice(0, start)} ${remaining.slice(close.after)}`;
+  }
+  return remaining;
+}
+
+function innerText(html: string, tag: string): string {
+  const start = indexOfOpenTag(html, tag);
+  if (start < 0) return '';
+  const gt = html.indexOf('>', start);
+  if (gt < 0) return '';
+  const close = indexOfCloseTag(html, tag, gt + 1);
+  if (!close) return '';
+  return html.slice(gt + 1, close.start);
+}
+
 function untrustedExcerpt(html: string): string {
-  const noScript = html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ');
-  const title = noScript.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] ?? '';
+  const noScript = dropElementBodies(dropElementBodies(html, 'script'), 'style');
+  const title = innerText(noScript, 'title');
   const text = `${title} ${noScript.replace(/<[^>]+>/g, ' ')}`.replace(/\s+/g, ' ').trim();
   return text.slice(0, 2000);
 }

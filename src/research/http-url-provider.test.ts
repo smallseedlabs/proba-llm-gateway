@@ -80,4 +80,40 @@ describe('research providers', () => {
     expect(bounced.ok).toBe(false);
     if (!bounced.ok) expect(bounced.code).toBe('ssrf_blocked');
   });
+
+  it('drops script and style bodies even when end tags include whitespace', async () => {
+    const html = [
+      '<html><title>Trail shoe</title><body>',
+      '<script>SECRET_SCRIPT_PAYLOAD</script >',
+      '<script type="text/javascript">ALSO_SECRET</script\t>',
+      '<style>SECRET_CSS{color:red}</style >',
+      '<scripter>visible widget</scripter>',
+      '<p>Buy the trail shoe</p>',
+      '<script>UNCLOSED_SECRET',
+      '</body></html>',
+    ].join('');
+    const provider = new HttpUrlResearchProvider({
+      timeoutMs: 1000,
+      maxBytes: 8192,
+      resolveAddresses: async () => ['8.8.8.8'],
+      fetchImpl: async () => new Response(html, { status: 200, headers: { 'content-type': 'text/html' } }),
+    });
+    const ok = await provider.research({
+      workspaceId: 'seedbed',
+      userId: '11111111-1111-4111-8111-111111111111',
+      goalId: '11111111-1111-4111-8111-111111111113',
+      threadId: '11111111-1111-4111-8111-111111111114',
+      landingPageUrl: TEST_LANDING_URL,
+    });
+    expect(ok.ok).toBe(true);
+    if (!ok.ok) return;
+    const blob = `${ok.findings[0]?.text ?? ''} ${ok.sources[0]?.excerpt ?? ''}`;
+    expect(blob).toMatch(/Trail shoe/);
+    expect(blob).toMatch(/Buy the trail shoe/);
+    expect(blob).toMatch(/visible widget/);
+    expect(blob).not.toMatch(/SECRET_SCRIPT_PAYLOAD/);
+    expect(blob).not.toMatch(/ALSO_SECRET/);
+    expect(blob).not.toMatch(/SECRET_CSS/);
+    expect(blob).not.toMatch(/UNCLOSED_SECRET/);
+  });
 });
