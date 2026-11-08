@@ -5,8 +5,8 @@ are **not** in this PR. Decisions **never grant spend**. There is no Ads POST
 and no paid `POST /v1/complete`.
 
 Context packets and audit events are consumed **read-only** from the existing
-protocol contracts (pin `github:smallseedlabs/proba-protocol#v0.4.0`). This
-process does not write sibling DBs.
+protocol contracts (pin `github:smallseedlabs/proba-protocol#v0.6.0`; v0.4
+field names stay valid). This process does not write sibling DBs.
 
 Test Context packets are labelled `FAKE: in-process analytics context fixture`.
 
@@ -134,8 +134,6 @@ Gateway does not enqueue Hub jobs, write Hub tables, or retry Hub PRs.
 
 ## Fastify / Zod highs (honest)
 
-This PR does **not** broaden `scripts/prod-audit-baseline.json`. The existing
-fastify 4 / zod 3 high GHSAs are a **documented baseline, not a security
-clearance**. Later remediation (fastify 5 / protocol zod 4) is required.
-New high+ GHSA IDs still fail CI. Do not treat `npm run audit:prod` passing
-as “no highs”.
+`scripts/prod-audit-baseline.json` is **empty** after Fastify 5.12.8 +
+protocol `v0.6.0` / Zod 4.6.7. Do not add IDs. New high+ GHSAs still fail
+CI. Do not npm-override Zod 4 onto protocol `v0.4.0`.

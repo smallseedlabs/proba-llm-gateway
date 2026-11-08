@@ -57,7 +57,7 @@ export const resumeApprovalSchema = z
   .object({
     askId: uuid,
     choice: z.enum(['approve', 'reject', 'edit']),
-    values: z.record(z.unknown()).optional(),
+    values: z.record(z.string(), z.unknown()).optional(),
     edit: z.string().optional(),
     planId: uuid.optional(),
     approved: z.boolean().optional(),

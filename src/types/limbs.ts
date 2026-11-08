@@ -30,7 +30,7 @@ export const verbDefinitionSchema = z
     name: z.string().min(1).max(128),
     description: z.string().max(4096),
     /** JSON Schema for arguments. Validated before any adapter is considered. */
-    parameters: z.record(z.unknown()),
+    parameters: z.record(z.string(), z.unknown()),
     risk: z.enum(VERB_RISK),
     sideEffecting: z.boolean(),
     requiresApproval: z.boolean(),

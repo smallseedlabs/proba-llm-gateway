@@ -16,21 +16,14 @@ const { evaluateProdAudit } = (await import(new URL('./assert-prod-audit.mjs', i
 };
 
 describe('production audit gate', () => {
-  it('passes the current fastify4/zod3 baseline and fails on a new high GHSA', () => {
-    const report = {
-      metadata: { vulnerabilities: { critical: 0, high: 1 } },
-      vulnerabilities: {
-        zod: {
-          severity: 'high',
-          via: [{ url: 'https://github.com/advisories/GHSA-mrhx-c7xc-m3w5' }],
-        },
-      },
-    };
-    const ok = evaluateProdAudit(report, ['GHSA-mrhx-c7xc-m3w5'], 1);
+  it('passes a clean high+ report against the empty post-remediation baseline', () => {
+    expect(baseline.github_advisory_ids).toEqual([]);
+    const ok = evaluateProdAudit({ metadata: { vulnerabilities: { critical: 0, high: 0 } }, vulnerabilities: {} }, [], 0);
     expect(ok.errors).toEqual([]);
-    expect(ok.found).toContain('GHSA-mrhx-c7xc-m3w5');
-    expect(baseline.github_advisory_ids).toContain('GHSA-mrhx-c7xc-m3w5');
+    expect(ok.found).toEqual([]);
+  });
 
+  it('fails on a new high GHSA rather than growing the allowlist', () => {
     const extra = evaluateProdAudit(
       {
         metadata: { vulnerabilities: { critical: 0, high: 1 } },
@@ -45,8 +38,14 @@ describe('production audit gate', () => {
       1
     );
     expect(extra.errors.some((e) => e.includes('GHSA-xxxx-xxxx-xxxx'))).toBe(true);
+  });
 
-    const stale = evaluateProdAudit(report, baseline.github_advisory_ids, 1);
+  it('fails when a listed baseline GHSA is no longer reported (allowlist cannot rot)', () => {
+    const stale = evaluateProdAudit(
+      { metadata: { vulnerabilities: { critical: 0, high: 0 } }, vulnerabilities: {} },
+      ['GHSA-mrhx-c7xc-m3w5'],
+      0
+    );
     expect(stale.errors.some((e) => e.includes('no longer reported'))).toBe(true);
   });
 

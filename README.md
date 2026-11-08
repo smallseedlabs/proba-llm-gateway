@@ -26,11 +26,11 @@ npm run audit:prod
 CI (GitHub Actions on `main` and `cursor/**`): lint, typecheck, tests with required
 research-guard names, `tsc` build, Docker image build, compose loopback /
 `RESEARCH_HTTP_FETCH=false`, gitleaks, CodeQL, and production `npm audit`
-(high+; fastify 4 / zod 3 findings are a documented baseline, **not a
-security clearance** — later remediation is required; do not broaden the
-allowlist; new IDs fail). Tests inject fetch doubles; CI does not enable
-live crawl, paid providers, or model spend. Protocol stays on the existing
-`v0.4.0` pin unless a later change needs 0.6.0.
+(high+ must stay empty after Fastify 5.12.8 + protocol `v0.6.0` / Zod 4.6.7;
+do not add IDs to `scripts/prod-audit-baseline.json`; new IDs fail). Tests
+inject fetch doubles; CI does not enable live crawl, paid providers, or
+model spend. Protocol pin is `v0.6.0` (Zod 4; v0.4 command/audit field names
+stay valid). Do not npm-override Zod 4 onto protocol `v0.4.0`.
 
 Configure via `.env.example`. Secrets belong in `*_FILE` mounts, not source.
 Test doubles are test-only (`NODE_ENV=test`).
