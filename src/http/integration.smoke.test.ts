@@ -15,13 +15,15 @@ import { writeTestSigningKeyFile } from '../testing/signing-key.js';
 import { testContextPacket, testRunRequest, TEST_GOAL_ID, TEST_THREAD_ID } from '../testing/fixtures.js';
 import { MemoryAuditPublisher } from '../testing/memory-audit.js';
 import { MemoryRunStore } from '../adapters/memory-run-store.js';
+import { MemoryResearchStore } from '../research/memory-store.js';
+import { seedAcceptedResearch, TEST_LANDING_URL, userLanding } from '../testing/research.js';
 import { AUDIT_CONTENT_MAX_CHARS } from '../protocol.js';
 import type { FastifyInstance } from 'fastify';
 import type { TurnResponse } from '../types/llm.js';
 
 const createArgs = {
   name: 'Spring',
-  landingPageUrl: 'https://example.com/offer',
+  landingPageUrl: TEST_LANDING_URL,
   dailyBudget: 10,
   currency: 'USD',
   platform: 'reddit',
@@ -164,6 +166,8 @@ describe('isolated HTTP integration smoke', () => {
       };
     });
 
+    const researchStore = new MemoryResearchStore('test');
+    await seedAcceptedResearch(researchStore);
     const runtime = await createRuntime(
       testConfig({
         llm: {
@@ -191,6 +195,7 @@ describe('isolated HTTP integration smoke', () => {
         hubKeys: signer.keys,
         audit,
         runs,
+        researchStore,
       }
     );
     app = await buildApp({
@@ -218,6 +223,7 @@ describe('isolated HTTP integration smoke', () => {
       idempotencyKey,
       goalId: TEST_GOAL_ID,
       threadId: TEST_THREAD_ID,
+      userSuppliedInput: userLanding(),
       command: {
         kind: 'command',
         clientMsgId: randomUUID(),
@@ -273,7 +279,7 @@ describe('isolated HTTP integration smoke', () => {
   it('cancels an awaiting-approval run without executing Ads', async () => {
     llmMode = 'happy';
     const adsBefore = adsCalls.length;
-    const payload = testRunRequest({ idempotencyKey: randomUUID() });
+    const payload = testRunRequest({ idempotencyKey: randomUUID(), userSuppliedInput: userLanding() });
     const first = await app.inject({
       method: 'POST',
       url: '/v1/runs',
@@ -346,6 +352,7 @@ describe('isolated HTTP integration smoke', () => {
     audit.failPublish = true;
     const payload = testRunRequest({
       idempotencyKey: randomUUID(),
+      userSuppliedInput: userLanding(),
       command: {
         kind: 'command',
         clientMsgId: randomUUID(),

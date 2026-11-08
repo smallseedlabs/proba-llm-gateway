@@ -1,0 +1,14 @@
+title = "proba-llm-gateway gitleaks"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Intentional fake secrets in tests, harnesses, and docs examples"
+paths = [
+  '''.*\.test\.ts$''',
+  '''.*\.testing\.ts$''',
+  '''(^|/)README\.md$''',
+  '''(^|/)docs/.*''',
+  '''(^|/)scripts/prod-audit-baseline\.json$''',
+]

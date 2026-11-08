@@ -124,6 +124,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayService
   if (nodeEnv === 'production' && !runStoreDir) {
     throw new ConfigError('RUN_STORE_DIR is required when NODE_ENV=production');
   }
+  const researchStoreDir = (env.RESEARCH_STORE_DIR ?? (nodeEnv === 'test' ? '' : 'data/research')).trim();
+  if (nodeEnv === 'production' && !researchStoreDir) {
+    throw new ConfigError('RESEARCH_STORE_DIR is required when NODE_ENV=production');
+  }
 
   if (env.INGRESS_PUBLIC?.trim() === 'true') {
     throw new ConfigError('INGRESS_PUBLIC=true is refused: proba-llm-gateway is an internal service with no public ingress default');
@@ -167,6 +171,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayService
       unknownBalancePolicy: 'refuse_mutating',
       billingRequirement: parseBillingRequirement(env.ADS_BILLING_REQUIREMENT),
       preflightFreshnessMs: envInt(env, 'ADS_PREFLIGHT_FRESHNESS_MS', 15_000, 1_000, 300_000),
+    },
+    research: {
+      httpFetchEnabled: envBool(env, 'RESEARCH_HTTP_FETCH', false),
+      timeoutMs: envInt(env, 'RESEARCH_FETCH_TIMEOUT_MS', 5_000, 100, 30_000),
+      maxBytes: envInt(env, 'RESEARCH_FETCH_MAX_BYTES', 262_144, 1024, 2_000_000),
+      storeDir: researchStoreDir,
     },
     limits: {
       maxRequestBytes: envInt(env, 'GATEWAY_MAX_REQUEST_BYTES', 262_144, 1024, 2_000_000),

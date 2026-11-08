@@ -8,3 +8,7 @@ export { HttpLlmClient } from './http-llm-client.js';
 export { HttpContextClient } from './http-context-client.js';
 export { HttpAdsDomain } from '../domains/ads/http.js';
 export { UnconfiguredAdsDomain } from '../domains/ads/unconfigured.js';
+export { UnconfiguredResearchProvider } from '../research/unconfigured.js';
+export { HttpUrlResearchProvider } from '../research/http-url-provider.js';
+export { MemoryResearchStore } from '../research/memory-store.js';
+export { FileResearchStore } from '../research/file-store.js';

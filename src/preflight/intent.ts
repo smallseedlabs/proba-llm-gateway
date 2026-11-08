@@ -96,6 +96,9 @@ export function resolveOperationIntent(
     if (verbName?.startsWith('page.')) {
       return { kind: 'page_mutate', requiresPage: true, requiresAds: false, spendClass: 'none' };
     }
+    if (verbName?.startsWith('research.')) {
+      return { kind: 'research_mutate', requiresAds: false, requiresPage: false, spendClass: 'none' };
+    }
     if (PLAN_STEPS.has(request.stepType) || request.stepType === 'handle_approval') {
       return { kind: 'read_or_plan', requiresAds: false, requiresPage: false, spendClass: 'none' };
     }

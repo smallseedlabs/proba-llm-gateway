@@ -45,6 +45,17 @@ export interface LlmClientConfig {
   quotaUnknownPolicy: 'allow_with_run_budget' | 'refuse';
 }
 
+export interface ResearchConfig {
+  /**
+   * Opt-in public URL fetch. Default false: unconfigured provider fails
+   * closed and does not invent citations. Not a paid ad action.
+   */
+  httpFetchEnabled: boolean;
+  timeoutMs: number;
+  maxBytes: number;
+  storeDir: string;
+}
+
 export interface AdsDomainConfig {
   /** Empty means unconfigured — ads verbs fail closed. HTTP so a later Ads service can plug in. */
   baseUrl: string;
@@ -117,6 +128,7 @@ export interface GatewayServiceConfig {
   llm: LlmClientConfig;
   context: ContextClientConfig;
   ads: AdsDomainConfig;
+  research: ResearchConfig;
   limits: LimitsConfig;
   audit: AuditConfig;
   runStoreDir: string;

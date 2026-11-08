@@ -5,6 +5,7 @@
  */
 
 import type { PolicyContext, PolicyDecision, PolicyEngine } from '../ports/policy.js';
+import { normalizeLandingPageUrl } from '../research/input.js';
 import { verbByName } from './catalog.js';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -68,6 +69,35 @@ export class CatalogPolicyEngine implements PolicyEngine {
     const schemaIssue = argumentsMatchSchema(verb.parameters, rawArgs);
     if (schemaIssue) return { allowed: false, code: 'schema', reason: schemaIssue };
     if (!isRecord(rawArgs)) return { allowed: false, code: 'schema', reason: 'arguments must be an object' };
+    const userUrl = normalizeLandingPageUrl(ctx.userSuppliedInput?.landingPageUrl);
+    if (verb.name === 'research.gather' || verb.name === 'ads.create_campaign') {
+      if (!userUrl) {
+        return {
+          allowed: false,
+          code: 'user_input',
+          reason:
+            'Hub userSuppliedInput.landingPageUrl is required; model/tool text is not a user-supplied URL and there is no default landing page',
+        };
+      }
+      const argUrl =
+        verb.name === 'research.gather'
+          ? normalizeLandingPageUrl(typeof rawArgs.url === 'string' ? rawArgs.url : userUrl)
+          : normalizeLandingPageUrl(rawArgs.landingPageUrl);
+      if (!argUrl || argUrl !== userUrl) {
+        return {
+          allowed: false,
+          code: 'user_input',
+          reason: 'tool URL does not match the authenticated user-supplied landing page for this input revision',
+        };
+      }
+      if (verb.name === 'research.gather') {
+        return { allowed: true, verb, args: { ...rawArgs, url: userUrl } };
+      }
+      return { allowed: true, verb, args: { ...rawArgs, landingPageUrl: userUrl } };
+    }
+    if (verb.name === 'research.accept') {
+      return { allowed: false, code: 'allowlist', reason: 'research.accept is Hub-mediated and is not a model tool' };
+    }
     return { allowed: true, verb, args: rawArgs };
   }
 }

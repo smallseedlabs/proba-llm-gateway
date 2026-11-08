@@ -72,6 +72,10 @@ export {
   RefusingLimbExecutor,
   SystemClock,
   UnconfiguredAdsDomain,
+  UnconfiguredResearchProvider,
+  HttpUrlResearchProvider,
+  MemoryResearchStore,
+  FileResearchStore,
 } from './adapters/index.js';
 export { DomainLimbExecutor } from './limbs/dispatcher.js';
 export { buildApp } from './http/app.js';

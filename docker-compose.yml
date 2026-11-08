@@ -37,6 +37,8 @@ services:
       AUDIT_CONTENT_ENABLED: "true"
       AUDIT_CONTENT_MASK_PII: "true"
       RUN_STORE_DIR: /app/data/runs
+      RESEARCH_STORE_DIR: /app/data/research
+      RESEARCH_HTTP_FETCH: "false"
     secrets:
       - hub_service_jwks
       - hub_assertion_jwks

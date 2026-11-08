@@ -8,6 +8,12 @@ import {
   ToolRefusedError,
 } from '../errors.js';
 import type { AdsDomainPort } from '../ports/ads.js';
+import type { ResearchArtifactStore } from '../ports/research.js';
+import { verbByName } from '../limbs/catalog.js';
+import { applyResearchResume, isResearchAcceptPending } from '../research/acceptance.js';
+import { lookupCurrentArtifact } from '../research/gather.js';
+import { readUserSuppliedLanding } from '../research/input.js';
+import type { ResearchArtifact } from '../types/research.js';
 import {
   applyPreflightToRecord,
   graphAuditDetails,
@@ -45,6 +51,7 @@ export interface LoopBodyDeps {
   approval: ApprovalGate;
   tools: LimbExecutor;
   ads: AdsDomainPort;
+  researchStore: ResearchArtifactStore;
   persist: (record: RunRecord) => Promise<void>;
   relay: (record: RunRecord) => Promise<void>;
 }
@@ -58,7 +65,17 @@ export async function runBoundedLoop(
 ): Promise<RunSnapshot> {
     if (record.pendingApproval && request.resume) {
     try {
-      await dispatchTools(deps, record, request, record.pendingApproval.remainingToolCalls, cancellation, usage);
+      if (isResearchAcceptPending(record.pendingApproval)) {
+        const leftover = await settleResearchAcceptance(deps, record, request);
+        if (leftover === 'wait') {
+          return record.snapshot ?? snapshotOf(record, 'awaiting_approval');
+        }
+        if (leftover.length > 0) {
+          await dispatchTools(deps, record, request, leftover, cancellation, usage);
+        }
+      } else {
+        await dispatchTools(deps, record, request, record.pendingApproval.remainingToolCalls, cancellation, usage);
+      }
     } catch (err) {
       if (err instanceof PreflightBlockedError) {
         return blockedSnapshot(deps, record, err.needs as CapabilityNeed[]);
@@ -72,7 +89,7 @@ export async function runBoundedLoop(
   for (let n = 0; n < hardCap; n += 1) {
     cancellation.throwIfAborted();
     const preflight = await runPreflight(
-      { config: deps.config, clock: deps.clock, ads: deps.ads, llm: deps.llm, context: deps.context },
+      { config: deps.config, clock: deps.clock, ads: deps.ads, llm: deps.llm, context: deps.context, researchStore: deps.researchStore },
       request,
       record,
       usage,
@@ -306,6 +323,8 @@ async function dispatchTools(
       workspaceId: request.workspaceId,
       userId: request.userId,
       goalId: request.goalId,
+      threadId: request.threadId,
+      userSuppliedInput: request.userSuppliedInput,
     });
     if (!decision.allowed) {
       record.events.push(
@@ -438,7 +457,7 @@ async function dispatchTools(
       args: decision.args,
     };
     const mutationPreflight = await runPreflight(
-      { config: deps.config, clock: deps.clock, ads: deps.ads, llm: deps.llm, context: deps.context },
+      { config: deps.config, clock: deps.clock, ads: deps.ads, llm: deps.llm, context: deps.context, researchStore: deps.researchStore },
       request,
       record,
       usage,
@@ -456,7 +475,7 @@ async function dispatchTools(
         details: graphAuditDetails(mutationPreflight),
       })
     );
-    if (decision.verb.limb === 'ads' && !mutationPreflight.allowed) {
+    if ((decision.verb.limb === 'ads' || decision.verb.limb === 'research') && !mutationPreflight.allowed) {
       throw new PreflightBlockedError(
         mutationPreflight.needs[0]?.message ?? 'mutating Ads work is blocked; preflight is not spending approval',
         mutationPreflight.needs
@@ -504,6 +523,13 @@ async function dispatchTools(
       );
       await deps.persist(record);
       await deps.relay(record);
+      if (decision.verb.name === 'research.gather' && result.ok) {
+        const artifact = result.data as ResearchArtifact;
+        if (artifact && artifact.status === 'awaiting_acceptance') {
+          await pauseForResearchAcceptance(deps, record, request, artifact, toolCalls.slice(i + 1));
+          throw new ApprovalRequiredError();
+        }
+      }
     } catch (err) {
       const aborted = cancellation.signal.aborted || (err instanceof ToolRefusedError && /ambiguous/.test(err.message));
       toolTurn.state = aborted ? 'ambiguous' : 'failed';
@@ -539,6 +565,116 @@ async function blockedSnapshot(
     { code: 'preflight_blocked', message: needs[0]?.message ?? 'preflight blocked', retryable: true },
     needs
   );
+}
+
+async function pauseForResearchAcceptance(
+  deps: LoopBodyDeps,
+  record: RunRecord,
+  request: HubRunRequest,
+  artifact: ResearchArtifact,
+  remainingToolCalls: Array<{ id: string; name: string; arguments: string }>
+): Promise<void> {
+  const acceptVerb = verbByName('research.accept');
+  if (!acceptVerb) throw new ToolRefusedError('research.accept is not in the catalog');
+  const args = { artifactId: artifact.artifactId, version: artifact.version, inputRevision: artifact.inputRevision };
+  const askId = randomUUID();
+  record.pendingApproval = {
+    askId,
+    runId: record.runId,
+    workspaceId: request.workspaceId,
+    verbName: acceptVerb.name,
+    args,
+    argsHash: canonicalArgsHash(args),
+    callId: 'research-accept',
+    toolCallId: 'research-accept',
+    remainingToolCalls,
+  };
+  record.state = 'awaiting_approval';
+  const toolOutput: BrainOutput = {
+    type: 'tool_call',
+    tool: acceptVerb.name,
+    parameters: {
+      ...args,
+      landingPageUrl: artifact.landingPageUrl,
+      findings: artifact.findings,
+      assumptions: artifact.assumptions,
+      unknowns: artifact.unknowns,
+      sources: artifact.sources.map((row) => ({ sourceId: row.sourceId, kind: row.kind, url: row.url, sha256: row.sha256 })),
+    },
+    needsApproval: true,
+    risk: acceptVerb.risk,
+  };
+  record.snapshot = {
+    ...snapshotOf(record, 'awaiting_approval', undefined, [toolOutput]),
+    needs: [
+      {
+        type: 'approval',
+        askId,
+        verb: acceptVerb.name,
+        argsHash: record.pendingApproval.argsHash,
+        workspaceId: request.workspaceId,
+        research: {
+          artifactId: artifact.artifactId,
+          version: artifact.version,
+          inputRevision: artifact.inputRevision,
+          landingPageUrl: artifact.landingPageUrl,
+        },
+      },
+    ],
+  };
+  record.events.push(
+    gatewayAuditEvent(request, {
+      action: 'approval.requested',
+      outcome: 'partial',
+      occurredAt: deps.clock.isoNow(),
+      details: { askId, verb: acceptVerb.name, argsHash: record.pendingApproval.argsHash, workspaceId: request.workspaceId },
+    })
+  );
+  await deps.persist(record);
+  await deps.relay(record);
+}
+
+async function settleResearchAcceptance(
+  deps: LoopBodyDeps,
+  record: RunRecord,
+  request: HubRunRequest
+): Promise<'wait' | Array<{ id: string; name: string; arguments: string }>> {
+  const pending = record.pendingApproval;
+  const resume = request.resume;
+  if (!pending || !resume) return 'wait';
+  const landingPageUrl = readUserSuppliedLanding(request.userSuppliedInput);
+  const binding =
+    request.goalId && request.threadId
+      ? { workspaceId: request.workspaceId, userId: request.userId, goalId: request.goalId, threadId: request.threadId }
+      : undefined;
+  const artifact = await lookupCurrentArtifact(deps.researchStore, binding, landingPageUrl);
+  const outcome = await applyResearchResume({
+    store: deps.researchStore,
+    artifact,
+    pending,
+    resume,
+    now: deps.clock.isoNow(),
+  });
+  const leftover = pending.remainingToolCalls;
+  record.events.push(
+    gatewayAuditEvent(request, {
+      action: outcome === 'accepted' ? 'approval.granted' : outcome === 'invalidated' ? 'approval.rejected' : 'approval.rejected',
+      outcome: outcome === 'accepted' ? 'success' : 'denied',
+      occurredAt: deps.clock.isoNow(),
+      details: { askId: pending.askId, verb: pending.verbName, research: outcome },
+    })
+  );
+  if (outcome === 'mismatch') {
+    return 'wait';
+  }
+  record.pendingApproval = undefined;
+  record.lastResume = undefined;
+  request.resume = undefined;
+  record.state = 'running';
+  record.snapshot = undefined;
+  await deps.persist(record);
+  if (outcome !== 'accepted') return [];
+  return leftover;
 }
 
 export function snapshotOf(

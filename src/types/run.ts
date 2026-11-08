@@ -23,6 +23,7 @@
 import { z } from 'zod';
 import { commandEnvelopeSchema, stepTypeSchema } from '../protocol.js';
 import { usageTotalsSchema } from './usage.js';
+import { userSuppliedInputSchema } from './research.js';
 
 const uuid = z.string().uuid();
 const spanId = z
@@ -84,6 +85,13 @@ export const hubRunRequestSchema = z
     idempotencyKey: uuid.optional(),
     budget: runBudgetSchema.optional(),
     resume: resumeApprovalSchema.optional(),
+    /**
+     * Operator-collected landing URL (and later fields). Required for
+     * research.gather and ads.create_campaign. Optional so current Hub
+     * callers still validate; those verbs fail closed until Hub sends it.
+     * Never a default marketing URL.
+     */
+    userSuppliedInput: userSuppliedInputSchema.optional(),
   })
   .strict();
 

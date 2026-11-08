@@ -154,6 +154,7 @@ export const capabilityNeedSchema = z
       'llm.quota',
       'context.ready',
       'run.budget',
+      'research.accepted',
     ]),
     state: capabilityStateSchema,
     claim: balanceClaimKindSchema.optional(),
@@ -193,6 +194,7 @@ export const prerequisiteIdSchema = z.enum([
   'ads.billing',
   'llm.quota',
   'context.ready',
+  'research.accepted',
 ]);
 export type PrerequisiteId = z.infer<typeof prerequisiteIdSchema>;
 
@@ -223,6 +225,12 @@ export type OperationIntent =
       probaCampaignId?: string;
       mappingRequired: boolean;
       spendClass: SpendClass;
+    }
+  | {
+      kind: 'research_mutate';
+      requiresAds: false;
+      requiresPage: false;
+      spendClass: 'none';
     };
 
 export interface PrerequisiteEvidence {

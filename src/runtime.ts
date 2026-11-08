@@ -32,6 +32,11 @@ import type { RunStore } from './ports/run-store.js';
 import type { LlmClient } from './ports/llm-client.js';
 import type { ContextPort } from './ports/context.js';
 import type { LimbExecutor } from './ports/limbs.js';
+import type { ResearchArtifactStore, ResearchProviderPort } from './ports/research.js';
+import { UnconfiguredResearchProvider } from './research/unconfigured.js';
+import { HttpUrlResearchProvider } from './research/http-url-provider.js';
+import { MemoryResearchStore } from './research/memory-store.js';
+import { FileResearchStore } from './research/file-store.js';
 import type { GatewayServiceConfig } from './types/config.js';
 
 export interface RuntimeOverrides {
@@ -44,6 +49,8 @@ export interface RuntimeOverrides {
   context?: ContextPort;
   tools?: LimbExecutor;
   ads?: AdsDomainPort;
+  research?: ResearchProviderPort;
+  researchStore?: ResearchArtifactStore;
   runs?: RunStore;
   fetch?: typeof fetch;
   logger?: Logger;
@@ -76,6 +83,9 @@ export async function createRuntime(config: GatewayServiceConfig, overrides: Run
   }
   if (overrides.ads && config.env === 'production') {
     throw new ConfigError('Ads domain overrides are not allowed when NODE_ENV=production');
+  }
+  if ((overrides.research || overrides.researchStore) && config.env === 'production') {
+    throw new ConfigError('Research overrides are not allowed when NODE_ENV=production');
   }
 
   const clock = overrides.clock ?? new SystemClock();
@@ -170,7 +180,22 @@ export async function createRuntime(config: GatewayServiceConfig, overrides: Run
       ads = new UnconfiguredAdsDomain();
     }
   }
-  const tools = overrides.tools ?? new DomainLimbExecutor(ads);
+  const researchProvider =
+    overrides.research ??
+    (config.research.httpFetchEnabled
+      ? new HttpUrlResearchProvider({
+          timeoutMs: config.research.timeoutMs,
+          maxBytes: config.research.maxBytes,
+          fetchImpl: overrides.fetch,
+        })
+      : new UnconfiguredResearchProvider());
+  const researchStore =
+    overrides.researchStore ??
+    (config.env === 'test' || !config.research.storeDir
+      ? new MemoryResearchStore(config.env)
+      : new FileResearchStore(config.research.storeDir));
+  const researchRuntime = { provider: researchProvider, store: researchStore, clock };
+  const tools = overrides.tools ?? new DomainLimbExecutor(ads, researchRuntime);
   const runs =
     overrides.runs ??
     (config.env === 'test' || !config.runStoreDir ? new MemoryRunStore(config.env) : new FileRunStore(config.runStoreDir));
@@ -196,6 +221,7 @@ export async function createRuntime(config: GatewayServiceConfig, overrides: Run
     approval: new FailClosedApprovalGate(),
     tools,
     ads,
+    researchStore,
     assertionKeys,
   });
 
@@ -229,6 +255,7 @@ export async function createRuntime(config: GatewayServiceConfig, overrides: Run
     },
     async close() {
       await runs.close();
+      await researchStore.close();
       await audit.close?.();
       await llm.close?.();
     },

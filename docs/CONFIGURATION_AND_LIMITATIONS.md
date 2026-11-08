@@ -56,7 +56,7 @@ Default product UX is **not** blanket denial: with `GATEWAY_MAX_COST_USD` unset,
 
 ## 4. CURRENT VERIFIED — gateway (`proba-llm-gateway`)
 
-Process: Node 20, Fastify, port **3700**. Restart required for env. Production refuses vendor LLM keys in this process (`DEEPSEEK_API_KEY` / `LLM_API_KEY`). `INGRESS_PUBLIC=true` refused. **No GitHub Actions** in this repo.
+Process: Node 20, Fastify, port **3700**. Restart required for env. Production refuses vendor LLM keys in this process (`DEEPSEEK_API_KEY` / `LLM_API_KEY`). `INGRESS_PUBLIC=true` refused. GitHub Actions: lint, typecheck, tests (research guards required), build, Docker, compose security, gitleaks, CodeQL, production npm audit.
 
 | Key / group | Meaning / units | Code default | Req | Validation | Scope | Unknown / fail |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -75,6 +75,10 @@ Process: Node 20, Fastify, port **3700**. Restart required for env. Production r
 | `ADS_DOMAIN_URL` | Ads HTTP | **empty** | no | allowlist if set | ads mutate | fail closed |
 | `ADS_BILLING_REQUIREMENT` | ads funds | `billing_eligibility` | no | enum | spend-increase | unknown funds refuse mutate |
 | `ADS_PREFLIGHT_FRESHNESS_MS` | evidence cache | `15000` (1000–300000) | no | int | preflight | stale Ads report |
+| `RESEARCH_HTTP_FETCH` | opt-in public URL fetch | **false** | no | bool | research.gather | unconfigured provider fails closed; **no invented citations**. Context is not research |
+| `RESEARCH_FETCH_TIMEOUT_MS` | fetch timeout | `5000` (100–30000) | no | int | research HTTP | abort |
+| `RESEARCH_FETCH_MAX_BYTES` | untrusted body cap | `262144` | no | int | research HTTP | `untrusted_content` |
+| `RESEARCH_STORE_DIR` | versioned review artifacts | `data/research` (empty in test) | prod | path | process | single-replica files, not Hub DB |
 | `GATEWAY_MAX_ITERATIONS` | loop | `8` (1–64) | no | int | run | exhausted |
 | `GATEWAY_MAX_LLM_CALLS` | paid completes | `8` (1–64) | no | int | run | exhausted |
 | `GATEWAY_MAX_TOOL_CALLS` | tools | `16` (1–256) | no | int | run | exhausted |
@@ -157,13 +161,14 @@ Gateway requires `goalId` + `threadId` + act-as (non-test) and a successful `/re
 
 ## 9. CURRENT VERIFIED — limitations (constraints, not wishes)
 
-1. **Gateway has no CI** (no `.github/`). Tests in this PR are **local only**.
+1. **Gateway CI** (`.github/workflows/ci.yml` + `security.yml`): lint, typecheck, tests with required research-guard names, build, Docker image, compose loopback/`RESEARCH_HTTP_FETCH=false`, gitleaks, CodeQL, production npm audit (high+ vs documented fastify 4 / zod 3 baseline). CI does not enable live crawl or paid providers.
 2. **Hub and LLM publication refusals** from earlier tasks remain final; this run does not retry them. Hub `gateway_runs` durability may exist on a Hub branch that is not merged from here.
 3. **`GET /v1/quota` and `GET /v1/pricing` do not exist on proba-llm.** Gateway records `unknown`. Official DeepSeek list prices (below) are **not** loaded into `PRICE_*`.
 4. **Paid path is opt-in** (`GATEWAY_URL`). Default Hub is mock brain. Enabling gateway with keys **can** spend at the vendor.
 5. **Single-node file durability** for gateway runs and LLM turns. Swarm files say a second replica or node move can double-dispatch.
 6. **Context is a hard prerequisite** for gateway brain (this PR). Act-as is Hub-minted; gateway does not mint it.
 7. **Ads domain / provider bots are not implemented** in gateway. `ADS_DOMAIN_URL` empty fails closed. No Reddit/Microsoft/Google/Meta credentials here.
+7b. **Research review is a gateway slice only.** Default `RESEARCH_HTTP_FETCH=false` (unconfigured, honest failure). `ads.create_campaign` cannot use a model-invented URL or skip an accepted current artifact. Hub/web/protocol UX is not in this repo (`docs/RESEARCH_REVIEW_CONTRACT.md`). No default landing URL.
 8. **Analytics metrics/schema are incomplete** for live campaigns (audit stubs; Context analytics source can gap).
 9. **Approval persistence:** gateway stores pending approval on the run record; Hub owns the user ask. Cross-service resume bindings were a Hub task; treat as **implemented in Hub branch / untested end-to-end from this gateway PR**.
 10. **Audit in gateway is producer + local replay**, not ClickHouse verification.

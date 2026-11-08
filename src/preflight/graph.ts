@@ -41,6 +41,7 @@ export const PREREQUISITE_NODES: Record<PrerequisiteId, PrerequisiteNode> = {
   'ads.service': { id: 'ads.service', cost: 1, kind: 'remote', dependsOn: [] },
   'llm.quota': { id: 'llm.quota', cost: 1, kind: 'remote', dependsOn: [] },
   'context.ready': { id: 'context.ready', cost: 1, kind: 'remote', dependsOn: ['auth.workspace'] },
+  'research.accepted': { id: 'research.accepted', cost: 0, kind: 'local', dependsOn: ['auth.workspace'] },
   'ads.connection': { id: 'ads.connection', cost: 2, kind: 'remote', dependsOn: ['ads.service'] },
   'ads.permissions': { id: 'ads.permissions', cost: 2, kind: 'remote', dependsOn: ['ads.service', 'ads.connection'] },
   'ads.blueprint': { id: 'ads.blueprint', cost: 2, kind: 'remote', dependsOn: ['ads.service'] },
@@ -86,7 +87,7 @@ export function operationManifest(input: {
     return { id: `${phase}:insufficient_intent`, phase, spendClass, requires: Object.freeze(requires) };
   }
 
-  if (intent.kind === 'page_mutate' || (intent.kind === 'read_or_plan' && intent.requiresPage) || (intent.kind === 'ads_mutate' && intent.requiresPage)) {
+  if (intent.kind === 'page_mutate' || (intent.kind === 'read_or_plan' && intent.requiresPage) || (intent.kind === 'ads_mutate' && intent.requiresPage) || intent.kind === 'research_mutate') {
     requires.push('limb.manifest');
   }
 
@@ -94,10 +95,20 @@ export function operationManifest(input: {
     requires.push('limb.manifest', 'ads.service', 'ads.connection', 'ads.permissions');
     if (intent.mappingRequired) requires.push('ads.blueprint');
     if (spendClass === 'spend_increase') requires.push('ads.billing');
+    if (phase === 'mutate' && (intent.verb === 'ads.create_campaign' || intent.verb === 'create_campaign')) {
+      requires.push('research.accepted');
+    }
   }
 
   const unique = [...new Set(requires)];
-  const verb = intent.kind === 'ads_mutate' ? intent.verb ?? 'ads' : intent.kind === 'page_mutate' ? 'page' : 'read';
+  const verb =
+    intent.kind === 'ads_mutate'
+      ? intent.verb ?? 'ads'
+      : intent.kind === 'page_mutate'
+        ? 'page'
+        : intent.kind === 'research_mutate'
+          ? 'research'
+          : 'read';
   return { id: `${phase}:${verb}`, phase, spendClass, requires: Object.freeze(unique) };
 }
 
@@ -221,6 +232,21 @@ const SOUNDNESS_MANIFESTS: readonly OperationManifest[] = [
       mappingRequired: false,
       spendClass: 'spend_increase',
     },
+  }),
+  operationManifest({
+    phase: 'mutate',
+    intent: {
+      kind: 'ads_mutate',
+      requiresAds: true,
+      requiresPage: false,
+      verb: 'ads.create_campaign',
+      mappingRequired: false,
+      spendClass: 'spend_increase',
+    },
+  }),
+  operationManifest({
+    phase: 'mutate',
+    intent: { kind: 'research_mutate', requiresAds: false, requiresPage: false, spendClass: 'none' },
   }),
   operationManifest({
     phase: 'mutate',
