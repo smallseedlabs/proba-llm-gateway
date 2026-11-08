@@ -179,7 +179,7 @@ export interface AdsPreflightQuery {
 export const spendClassSchema = z.enum(['none', 'safety_decrease', 'spend_increase']);
 export type SpendClass = z.infer<typeof spendClassSchema>;
 
-export const runPhaseSchema = z.enum(['brain', 'mutate']);
+export const runPhaseSchema = z.enum(['brain', 'mutate', 'evaluate']);
 export type RunPhase = z.infer<typeof runPhaseSchema>;
 
 export const prerequisiteIdSchema = z.enum([

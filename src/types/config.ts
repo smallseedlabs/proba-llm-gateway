@@ -45,6 +45,21 @@ export interface LlmClientConfig {
   quotaUnknownPolicy: 'allow_with_run_budget' | 'refuse';
 }
 
+export interface AnalyticsConfig {
+  /** Max age of Context analytics asOf. Stale → no_action, not a zero fill. */
+  maxAgeMs: number;
+  minImpressions: number;
+  minObservations: number;
+  /** 0–1 fraction of expected hourly buckets. Unknown coverage is not assumed complete. */
+  minWindowCoverage: number;
+  cooldownMs: number;
+  /** Optional ceiling on dry-run cap proposals. Unset = no extra ceiling besides decrease %. */
+  maxProposalDailyBudget: number | null;
+  /** Max fraction a cap may decrease currentDailyBudget. Unset = no decrease ceiling. */
+  maxProposalDecreasePct: number | null;
+  storeDir: string;
+}
+
 export interface ResearchConfig {
   /**
    * Opt-in public URL fetch. Default false: unconfigured provider fails
@@ -129,6 +144,7 @@ export interface GatewayServiceConfig {
   context: ContextClientConfig;
   ads: AdsDomainConfig;
   research: ResearchConfig;
+  analytics: AnalyticsConfig;
   limits: LimitsConfig;
   audit: AuditConfig;
   runStoreDir: string;

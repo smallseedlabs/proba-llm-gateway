@@ -128,6 +128,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayService
   if (nodeEnv === 'production' && !researchStoreDir) {
     throw new ConfigError('RESEARCH_STORE_DIR is required when NODE_ENV=production');
   }
+  const analyticsStoreDir = (env.ANALYTICS_STORE_DIR ?? (nodeEnv === 'test' ? '' : 'data/analytics')).trim();
+  if (nodeEnv === 'production' && !analyticsStoreDir) {
+    throw new ConfigError('ANALYTICS_STORE_DIR is required when NODE_ENV=production');
+  }
 
   if (env.INGRESS_PUBLIC?.trim() === 'true') {
     throw new ConfigError('INGRESS_PUBLIC=true is refused: proba-llm-gateway is an internal service with no public ingress default');
@@ -177,6 +181,32 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayService
       timeoutMs: envInt(env, 'RESEARCH_FETCH_TIMEOUT_MS', 5_000, 100, 30_000),
       maxBytes: envInt(env, 'RESEARCH_FETCH_MAX_BYTES', 262_144, 1024, 2_000_000),
       storeDir: researchStoreDir,
+    },
+    analytics: {
+      maxAgeMs: envInt(env, 'ANALYTICS_MAX_AGE_MS', 6 * 60 * 60 * 1000, 1_000, 30 * 24 * 60 * 60 * 1000),
+      minImpressions: envInt(env, 'ANALYTICS_MIN_IMPRESSIONS', 100, 0, 1_000_000_000),
+      minObservations: envInt(env, 'ANALYTICS_MIN_OBSERVATIONS', 12, 0, 1_000_000),
+      minWindowCoverage: (() => {
+        const raw = env.ANALYTICS_MIN_WINDOW_COVERAGE?.trim();
+        if (!raw) return 0.5;
+        const parsed = Number(raw);
+        if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1) {
+          throw new ConfigError('ANALYTICS_MIN_WINDOW_COVERAGE must be between 0 and 1');
+        }
+        return parsed;
+      })(),
+      cooldownMs: envInt(env, 'ANALYTICS_COOLDOWN_MS', 6 * 60 * 60 * 1000, 0, 30 * 24 * 60 * 60 * 1000),
+      maxProposalDailyBudget: envOptionalNumber(env, 'ANALYTICS_MAX_PROPOSAL_DAILY_BUDGET'),
+      maxProposalDecreasePct: (() => {
+        const raw = env.ANALYTICS_MAX_PROPOSAL_DECREASE_PCT?.trim();
+        if (!raw) return 0.5;
+        const parsed = Number(raw);
+        if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1) {
+          throw new ConfigError('ANALYTICS_MAX_PROPOSAL_DECREASE_PCT must be between 0 and 1');
+        }
+        return parsed;
+      })(),
+      storeDir: analyticsStoreDir,
     },
     limits: {
       maxRequestBytes: envInt(env, 'GATEWAY_MAX_REQUEST_BYTES', 262_144, 1024, 2_000_000),

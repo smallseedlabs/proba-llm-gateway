@@ -82,6 +82,9 @@ export function operationManifest(input: {
   if (phase === 'brain') {
     requires.push('llm.quota', 'context.ready');
   }
+  if (phase === 'evaluate') {
+    requires.push('context.ready');
+  }
 
   if (intent.kind === 'insufficient_intent') {
     return { id: `${phase}:insufficient_intent`, phase, spendClass, requires: Object.freeze(requires) };
@@ -220,6 +223,10 @@ function byCostThenId(nodes: Record<string, { cost: number }>): (a: string, b: s
 const SOUNDNESS_MANIFESTS: readonly OperationManifest[] = [
   operationManifest({
     phase: 'brain',
+    intent: { kind: 'read_or_plan', requiresAds: false, requiresPage: false, spendClass: 'none' },
+  }),
+  operationManifest({
+    phase: 'evaluate',
     intent: { kind: 'read_or_plan', requiresAds: false, requiresPage: false, spendClass: 'none' },
   }),
   operationManifest({
