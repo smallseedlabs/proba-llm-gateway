@@ -1,16 +1,4 @@
 {
-  "comment": "Production high+ GHSAs that need major upgrades (fastify 5, protocol/zod 4). This list is a documented baseline, NOT a security clearance. Later remediation is required. Do not broaden this allowlist. New IDs fail CI. Removing a listed ID from npm audit also fails until this file is tightened. Protocol v0.6.0 is not forced in this PR.",
-  "github_advisory_ids": [
-    "GHSA-444r-cwp2-x5xf",
-    "GHSA-4mh8-r7rc-xpvc",
-    "GHSA-667r-xxjv-c9mm",
-    "GHSA-9q9j-q6p8-xq58",
-    "GHSA-c96f-x56v-gq3h",
-    "GHSA-hwr6-493r-vm6h",
-    "GHSA-jx2c-rxcm-jvmq",
-    "GHSA-mrhx-c7xc-m3w5",
-    "GHSA-mrq3-vjjr-p77c",
-    "GHSA-p68q-wchp-6fh7",
-    "GHSA-w2qp-rph6-63g4"
-  ]
+  "comment": "Empty after Fastify 5.12.8 + protocol v0.6.0 / Zod 4.6.7 remediation. This is not an allowlist to grow. New high+ production GHSAs fail CI. Do not add IDs back. Do not use npm overrides to force Zod 4 onto an older protocol tag.",
+  "github_advisory_ids": []
 }

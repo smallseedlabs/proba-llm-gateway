@@ -7,8 +7,9 @@
  *   - any high/critical GHSA not listed in scripts/prod-audit-baseline.json
  *   - a baseline GHSA that is no longer reported (so the allow-list cannot rot)
  *
- * Known fastify 4 / zod 3 findings stay listed until a dedicated major upgrade.
+ * After Fastify 5.12.8 + protocol v0.6.0 / Zod 4.6.7 the baseline is empty.
  * This is not Hub's warning-only job: extra advisories fail the build.
+ * Do not broaden scripts/prod-audit-baseline.json.
  */
 import { readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
@@ -99,10 +100,7 @@ function main() {
     process.exit(1);
   }
   if (found.length > 0) {
-    console.log(
-      'Baseline high+ advisories still present (fastify 4 / zod 3). ' +
-        'New IDs would fail this job. Protocol v0.6.0 / fastify 5 are not forced here.'
-    );
+    console.log('Baseline high+ advisories still present. New IDs would fail this job.');
   } else {
     console.log('No high+ production advisories.');
   }

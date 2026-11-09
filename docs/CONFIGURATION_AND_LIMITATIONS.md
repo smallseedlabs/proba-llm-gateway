@@ -56,7 +56,7 @@ Default product UX is **not** blanket denial: with `GATEWAY_MAX_COST_USD` unset,
 
 ## 4. CURRENT VERIFIED — gateway (`proba-llm-gateway`)
 
-Process: Node 20, Fastify, port **3700**. Restart required for env. Production refuses vendor LLM keys in this process (`DEEPSEEK_API_KEY` / `LLM_API_KEY`). `INGRESS_PUBLIC=true` refused. GitHub Actions: lint, typecheck, tests (research guards required), build, Docker, compose security, gitleaks, CodeQL, production npm audit.
+Process: Node 20, Fastify 5, port **3700**. Restart required for env. Production refuses vendor LLM keys in this process (`DEEPSEEK_API_KEY` / `LLM_API_KEY`). `INGRESS_PUBLIC=true` refused. GitHub Actions: lint, typecheck, tests (research guards required), build, Docker, compose security, gitleaks, CodeQL, production npm audit (high+ empty after Fastify 5 / protocol v0.6.0 Zod 4).
 
 | Key / group | Meaning / units | Code default | Req | Validation | Scope | Unknown / fail |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -171,7 +171,7 @@ Gateway requires `goalId` + `threadId` + act-as (non-test) and a successful `/re
 
 ## 9. CURRENT VERIFIED — limitations (constraints, not wishes)
 
-1. **Gateway CI** (`.github/workflows/ci.yml` + `security.yml`): lint, typecheck, tests with required research-guard names, build, Docker image, compose loopback/`RESEARCH_HTTP_FETCH=false`, gitleaks, CodeQL, production npm audit (high+ vs documented fastify 4 / zod 3 baseline). **That baseline is not a security clearance**; later fastify 5 / protocol zod 4 remediation is required. Do not broaden `scripts/prod-audit-baseline.json`. CI does not enable live crawl or paid providers.
+1. **Gateway CI** (`.github/workflows/ci.yml` + `security.yml`): lint, typecheck, tests with required research-guard names, build, Docker image, compose loopback/`RESEARCH_HTTP_FETCH=false`, gitleaks, CodeQL, production npm audit (high+ must be **empty** after Fastify 5.12.8 + protocol `v0.6.0` / Zod 4.6.7). Do **not** add IDs to `scripts/prod-audit-baseline.json`. Do not npm-override Zod 4 onto protocol `v0.4.0`. CI does not enable live crawl or paid providers.
 2. **Hub and LLM publication refusals** from earlier tasks remain final; this run does not retry them. Hub `gateway_runs` durability may exist on a Hub branch that is not merged from here.
 3. **`GET /v1/quota` and `GET /v1/pricing` do not exist on proba-llm.** Gateway records `unknown`. Official DeepSeek list prices (below) are **not** loaded into `PRICE_*`.
 4. **Paid path is opt-in** (`GATEWAY_URL`). Default Hub is mock brain. Enabling gateway with keys **can** spend at the vendor.
@@ -300,5 +300,7 @@ Infra (hosting, Redis, ClickHouse) is **out of this formula**.
 | Context env | `proba-context/docs/CONFIG.md` |
 | Platform local | `proba/local/.env.example` |
 | DeepSeek list prices | https://api-docs.deepseek.com/quick_start/pricing/ (fetched 2026-11-08) |
+| Production npm audit baseline | `proba-llm-gateway/scripts/prod-audit-baseline.json` (empty after Fastify 5 / Zod 4) |
+| Protocol pin | `proba-llm-gateway/package.json` `github:smallseedlabs/proba-protocol#v0.6.0` |
 | Analytics evaluator | `proba-llm-gateway/docs/ANALYTICS_EVALUATOR.md` |
 | Owner action policies | `proba-llm-gateway/docs/ACTION_POLICIES.md`, `src/action-policy/` |
