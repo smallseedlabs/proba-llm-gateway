@@ -155,6 +155,10 @@ export const runSnapshotSchema = z
     progress: runProgressSchema.optional(),
     usage: usageTotalsSchema,
     error: runErrorSchema.optional(),
+    /** review_performance summary; a dry-run proposal is evidence, not approval. */
+    analytics: z.record(z.string(), z.unknown()).optional(),
+    /** Outcome of a Hub-approved analytics action. */
+    actionOutcome: z.record(z.string(), z.unknown()).optional(),
   })
   .strict();
 

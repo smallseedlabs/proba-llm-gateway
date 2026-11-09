@@ -71,6 +71,10 @@ export interface RunRecord {
   pendingApproval?: PendingApproval;
   domainState: Record<string, unknown>;
   lastResume?: ResumeApproval;
+  /** review_performance outcome surfaced to Hub (dry-run proposal is evidence only). */
+  analytics?: RunAnalyticsSummary;
+  /** Approved analytics action outcome surfaced to Hub. */
+  actionOutcome?: RunActionOutcome;
   lastPreflight?: {
     asOf: string;
     ads?: AdsPreflightReport;
@@ -97,4 +101,48 @@ export interface RunStore {
 
 export function runStoreKey(issuer: string, subject: string, idempotencyKey: string): string {
   return `${issuer}\n${subject}\n${idempotencyKey}`;
+}
+
+export interface RunAnalyticsSummary {
+  decisionId: string;
+  outcome: 'report' | 'no_action' | 'blocked' | 'dry_run_proposal';
+  grantsSpend: false;
+  asOf: string | null;
+  probaCampaignId?: string;
+  platform?: string;
+  accountId?: string;
+  providerCampaignId?: string;
+  reviewWindowUntil?: string;
+  unknownMetrics: string[];
+  gate?: { code: string; message: string };
+  metrics: Array<{
+    sourceItemId: string;
+    platform: string;
+    accountId: string;
+    campaignId: string;
+    asOf: string;
+    currency?: string;
+    impressions: number | 'unknown';
+    clicks: number | 'unknown';
+    spend: number | 'unknown';
+    conversions: number | 'unknown';
+  }>;
+  proposal?: {
+    dryRun: true;
+    grantsSpend: false;
+    verb: string;
+    args: Record<string, unknown>;
+    argsHash: string;
+  };
+}
+
+export interface RunActionOutcome {
+  proposalId: string;
+  decisionId: string;
+  verb: string;
+  probaCampaignId: string;
+  ok: boolean;
+  code?: string;
+  message?: string;
+  grantsSpend: false;
 }

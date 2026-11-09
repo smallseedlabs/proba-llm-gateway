@@ -53,7 +53,7 @@ export interface ActionOutcomeRecord {
   policyId: string | null;
   policyVersion: number | null;
   mode: ActionPolicyMode;
-  outcome: 'denied' | 'approval_required' | 'auto_executed' | 'cooldown';
+  outcome: 'denied' | 'approval_required' | 'auto_executed' | 'approved_executed' | 'cooldown';
   occurredAt: string;
   cooldownUntil: string;
   grantsSpend: false;

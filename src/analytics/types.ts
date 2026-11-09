@@ -83,6 +83,9 @@ export interface AnalyticsDecisionRecord {
   argsHash?: string;
   occurredAt: string;
   packetHash?: string;
+  /** Provider scope at evaluation time; approved actions must match it. */
+  platform?: string;
+  accountId?: string;
 }
 
 export interface AnalyticsEvaluateResult {

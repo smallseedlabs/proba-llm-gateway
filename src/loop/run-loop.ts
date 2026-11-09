@@ -13,6 +13,7 @@ import type { AnalyticsDecisionStore } from '../analytics/store.js';
 import type { ActionOutcomeStore, ActionPolicyStore } from '../action-policy/store.js';
 import { campaignIdOf, evaluateActionPolicy } from '../action-policy/evaluate.js';
 import { runAnalyticsReview } from './analytics-review.js';
+import { approvedActionFromRequest, runApprovedAction } from './approved-action.js';
 import { verbByName } from '../limbs/catalog.js';
 import { applyResearchResume, isResearchAcceptPending } from '../research/acceptance.js';
 import { lookupCurrentArtifact } from '../research/gather.js';
@@ -94,6 +95,11 @@ export async function runBoundedLoop(
 
   if (request.stepType === 'review_performance') {
     return runAnalyticsReview(deps, record, request, cancellation, usage);
+  }
+
+  const approvedAction = approvedActionFromRequest(request);
+  if (approvedAction) {
+    return runApprovedAction(deps, record, request, approvedAction, cancellation, usage);
   }
 
   const hardCap = Math.max(1, deps.config.limits.maxIterations) + 1;
@@ -768,6 +774,8 @@ export function snapshotOf(
     usage: record.usage,
     progress: { runId: record.runId, status, iteration: record.iteration, usage: record.usage },
     error,
+    ...(record.analytics ? { analytics: { ...record.analytics } as Record<string, unknown> } : {}),
+    ...(record.actionOutcome ? { actionOutcome: { ...record.actionOutcome } as Record<string, unknown> } : {}),
   };
 }
 
