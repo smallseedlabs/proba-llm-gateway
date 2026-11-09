@@ -11,6 +11,7 @@ import { attachUserPage } from '../domains/page/local.js';
 import { researchAcceptedNeed } from '../research/artifact.js';
 import { bindingFromCtx, executeGather, lookupCurrentArtifact, type ResearchRuntime } from '../research/gather.js';
 import { normalizeLandingPageUrl } from '../research/input.js';
+import type { ResearchArtifact } from '../types/research.js';
 
 export class DomainLimbExecutor implements LimbExecutor {
   readonly name = 'domain';
@@ -49,9 +50,27 @@ export class DomainLimbExecutor implements LimbExecutor {
           message: 'pass probaCampaignId only; provider resource ids are mapped by the Ads domain',
         };
       }
+      let args = call.args;
       if (call.verb.name === 'ads.create_campaign') {
-        const blocked = await this.assertAcceptedResearch(call, ctx);
-        if (blocked) return blocked;
+        const accepted = await this.acceptedResearch(call, ctx);
+        if (!accepted.ok) return accepted;
+        // Forward the Hub-accepted research binding plus a gateway attestation so
+        // Ads can verify (it never calls Hub). Not part of the approval hash.
+        args = {
+          ...call.args,
+          researchAcceptance: {
+            artifactId: accepted.artifact.artifactId,
+            version: accepted.artifact.version,
+            inputRevision: accepted.artifact.inputRevision,
+          },
+          researchAttestation: {
+            status: 'accepted',
+            landingPageUrl: accepted.artifact.landingPageUrl,
+            acceptedAt: accepted.artifact.acceptedAt,
+            sourceCount: accepted.artifact.sources.length,
+            findingCount: accepted.artifact.findings.length,
+          },
+        };
       }
       const result = await this.ads.execute({
         traceId: ctx.traceId,
@@ -59,7 +78,7 @@ export class DomainLimbExecutor implements LimbExecutor {
         userId: ctx.userId,
         goalId: ctx.goalId,
         verb: call.verb.name,
-        args: call.args,
+        args,
         idempotencyKey: call.idempotencyKey,
         signal: ctx.signal,
       });
@@ -76,7 +95,10 @@ export class DomainLimbExecutor implements LimbExecutor {
     throw new ToolRefusedError(`no domain adapter for ${call.verb.name}`);
   }
 
-  private async assertAcceptedResearch(call: LimbCall, ctx: LimbExecutionContext): Promise<LimbResult | undefined> {
+  private async acceptedResearch(
+    call: LimbCall,
+    ctx: LimbExecutionContext
+  ): Promise<{ ok: true; artifact: ResearchArtifact } | { ok: false; code: string; message: string }> {
     if (!this.research) {
       return {
         ok: false,
@@ -87,7 +109,9 @@ export class DomainLimbExecutor implements LimbExecutor {
     const landingPageUrl = normalizeLandingPageUrl(call.args.landingPageUrl);
     const artifact = await lookupCurrentArtifact(this.research.store, bindingFromCtx(ctx), landingPageUrl);
     const need = researchAcceptedNeed(artifact, landingPageUrl);
-    if (!need) return undefined;
-    return { ok: false, code: 'research_not_accepted', message: need.message };
+    if (need || !artifact || artifact.status !== 'accepted' || !artifact.acceptedAt) {
+      return { ok: false, code: 'research_not_accepted', message: need?.message ?? 'research artifact is not accepted' };
+    }
+    return { ok: true, artifact };
   }
 }

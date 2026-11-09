@@ -69,9 +69,38 @@ export const researchArtifactSchema = z
   .strict();
 export type ResearchArtifact = z.infer<typeof researchArtifactSchema>;
 
+/**
+ * Operator-approved Reddit creative (copy/media) forwarded by Hub. Ads creates
+ * the structured post from this and then uses the returned post id for the ad.
+ * Never model-authored: the catalog does not list `creative` as a tool arg.
+ */
+export const approvedCreativeSchema = z.union([
+  z
+    .object({
+      type: z.literal('TEXT'),
+      headline: z.string().min(1).max(300),
+      body: z.string().min(1).max(40_000),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal('IMAGE'),
+      headline: z.string().min(1).max(300),
+      body: z.string().min(1).max(40_000).optional(),
+      mediaUrl: z.string().min(1).max(2048),
+      callToAction: z.string().min(1).max(64).optional(),
+    })
+    .strict(),
+]);
+export type ApprovedCreative = z.infer<typeof approvedCreativeSchema>;
+
 export const userSuppliedInputSchema = z
   .object({
     landingPageUrl: z.string().min(1).max(2048),
+    /** Operator-approved copy/media for the Reddit structured post. */
+    creative: approvedCreativeSchema.optional(),
+    /** Operator-approved targeting (Ads validates the Reddit shape). */
+    targeting: z.record(z.string(), z.unknown()).optional(),
   })
   .strict();
 export type UserSuppliedInput = z.infer<typeof userSuppliedInputSchema>;

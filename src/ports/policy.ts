@@ -10,7 +10,7 @@ export interface PolicyContext {
   userId: string;
   goalId?: string;
   threadId?: string;
-  userSuppliedInput?: { landingPageUrl: string };
+  userSuppliedInput?: { landingPageUrl: string; creative?: Record<string, unknown>; targeting?: Record<string, unknown> };
 }
 
 export type PolicyDecision =

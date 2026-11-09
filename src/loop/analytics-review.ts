@@ -127,6 +127,45 @@ export async function runAnalyticsReview(
     await deps.analyticsStore.put(persisted);
   }
 
+  record.analytics = {
+    decisionId: result.decisionId,
+    outcome: result.outcome,
+    grantsSpend: false,
+    asOf: result.asOf,
+    ...(persisted?.probaCampaignId ? { probaCampaignId: persisted.probaCampaignId } : {}),
+    ...(persisted?.platform ? { platform: persisted.platform } : {}),
+    ...(persisted?.accountId ? { accountId: persisted.accountId } : {}),
+    ...(result.scope.providerCampaignId ? { providerCampaignId: result.scope.providerCampaignId } : {}),
+    ...(persisted && result.gate?.code !== 'cooldown' && result.gate?.code !== 'stale_decision'
+      ? { reviewWindowUntil: persisted.cooldownUntil }
+      : {}),
+    unknownMetrics: result.unknownMetrics,
+    ...(result.gate ? { gate: result.gate } : {}),
+    metrics: result.snapshots.map((m) => ({
+      sourceItemId: m.sourceItemId,
+      platform: m.platform,
+      accountId: m.accountId,
+      campaignId: m.campaignId,
+      asOf: m.asOf,
+      ...(m.currency ? { currency: m.currency } : {}),
+      impressions: m.impressions,
+      clicks: m.clicks,
+      spend: m.spend,
+      conversions: m.conversions,
+    })),
+    ...(result.proposal && persisted && result.gate === undefined
+      ? {
+          proposal: {
+            dryRun: true as const,
+            grantsSpend: false as const,
+            verb: result.proposal.verb,
+            args: result.proposal.args,
+            argsHash: result.proposal.argsHash,
+          },
+        }
+      : {}),
+  };
+
   const status = result.outcome === 'blocked' ? 'blocked' : 'completed';
   return finish(
     deps,

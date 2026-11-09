@@ -169,5 +169,11 @@ export function decisionRecordFromResult(
     argsHash: result.proposal?.argsHash,
     occurredAt: input.now.toISOString(),
     packetHash: input.packetHash,
+    ...(result.scope.platform ?? result.snapshots[0]?.platform
+      ? { platform: result.scope.platform ?? result.snapshots[0]?.platform }
+      : {}),
+    ...(result.scope.accountId ?? result.snapshots[0]?.accountId
+      ? { accountId: result.scope.accountId ?? result.snapshots[0]?.accountId }
+      : {}),
   };
 }
