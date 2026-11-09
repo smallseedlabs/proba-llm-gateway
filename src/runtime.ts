@@ -36,6 +36,9 @@ import type { ResearchArtifactStore, ResearchProviderPort } from './ports/resear
 import type { AnalyticsDecisionStore } from './analytics/store.js';
 import { MemoryAnalyticsStore } from './analytics/memory-store.js';
 import { FileAnalyticsStore } from './analytics/file-store.js';
+import type { ActionOutcomeStore, ActionPolicyStore } from './action-policy/store.js';
+import { MemoryActionOutcomeStore, MemoryActionPolicyStore } from './action-policy/memory-store.js';
+import { FileActionOutcomeStore, FileActionPolicyStore } from './action-policy/file-store.js';
 import { UnconfiguredResearchProvider } from './research/unconfigured.js';
 import { HttpUrlResearchProvider } from './research/http-url-provider.js';
 import { MemoryResearchStore } from './research/memory-store.js';
@@ -55,6 +58,8 @@ export interface RuntimeOverrides {
   research?: ResearchProviderPort;
   researchStore?: ResearchArtifactStore;
   analyticsStore?: AnalyticsDecisionStore;
+  actionPolicyStore?: ActionPolicyStore;
+  actionOutcomeStore?: ActionOutcomeStore;
   runs?: RunStore;
   fetch?: typeof fetch;
   logger?: Logger;
@@ -93,6 +98,9 @@ export async function createRuntime(config: GatewayServiceConfig, overrides: Run
   }
   if (overrides.analyticsStore && config.env === 'production') {
     throw new ConfigError('Analytics store overrides are not allowed when NODE_ENV=production');
+  }
+  if ((overrides.actionPolicyStore || overrides.actionOutcomeStore) && config.env === 'production') {
+    throw new ConfigError('Action policy store overrides are not allowed when NODE_ENV=production');
   }
 
   const clock = overrides.clock ?? new SystemClock();
@@ -206,6 +214,16 @@ export async function createRuntime(config: GatewayServiceConfig, overrides: Run
     (config.env === 'test' || !config.analytics.storeDir
       ? new MemoryAnalyticsStore(config.env)
       : new FileAnalyticsStore(config.analytics.storeDir));
+  const actionPolicyStore =
+    overrides.actionPolicyStore ??
+    (config.env === 'test' || !config.actionPolicy.storeDir
+      ? new MemoryActionPolicyStore(config.env)
+      : new FileActionPolicyStore(config.actionPolicy.storeDir));
+  const actionOutcomeStore =
+    overrides.actionOutcomeStore ??
+    (config.env === 'test' || !config.actionPolicy.outcomeStoreDir
+      ? new MemoryActionOutcomeStore(config.env)
+      : new FileActionOutcomeStore(config.actionPolicy.outcomeStoreDir));
   const researchRuntime = { provider: researchProvider, store: researchStore, clock };
   const tools = overrides.tools ?? new DomainLimbExecutor(ads, researchRuntime);
   const runs =
@@ -235,6 +253,8 @@ export async function createRuntime(config: GatewayServiceConfig, overrides: Run
     ads,
     researchStore,
     analyticsStore,
+    actionPolicyStore,
+    actionOutcomeStore,
     assertionKeys,
   });
 
@@ -270,6 +290,8 @@ export async function createRuntime(config: GatewayServiceConfig, overrides: Run
       await runs.close();
       await researchStore.close();
       await analyticsStore.close();
+      await actionPolicyStore.close();
+      await actionOutcomeStore.close();
       await audit.close?.();
       await llm.close?.();
     },

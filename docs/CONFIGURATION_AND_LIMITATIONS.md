@@ -86,6 +86,9 @@ Process: Node 20, Fastify 5, port **3700**. Restart required for env. Production
 | `ANALYTICS_MAX_PROPOSAL_DAILY_BUDGET` | optional dry-run cap ceiling | **UNSET** (`null`) | no | positive number | evaluate | not a spend grant |
 | `ANALYTICS_MAX_PROPOSAL_DECREASE_PCT` | max cap decrease fraction | `0.5` | no | 0–1 | evaluate | increases blocked |
 | `ANALYTICS_STORE_DIR` | per-campaign decision files | `data/analytics` (empty in test) | prod | path | process | single-replica; in-memory refused in production |
+| `ACTION_POLICY_STORE_DIR` | versioned owner action policies | `data/action-policies` (empty in test) | prod | path | process | in-memory refused in production; no live delegation |
+| `ACTION_OUTCOME_STORE_DIR` | auto action cooldown/outcomes | `data/action-outcomes` (empty in test) | prod | path | process | single-replica |
+| `ACTION_POLICY_COOLDOWN_MS` | default auto cooldown | `21600000` (6h) | no | int | ads auto | owner document may set a tighter limit |
 | `GATEWAY_MAX_ITERATIONS` | loop | `8` (1–64) | no | int | run | exhausted |
 | `GATEWAY_MAX_LLM_CALLS` | paid completes | `8` (1–64) | no | int | run | exhausted |
 | `GATEWAY_MAX_TOOL_CALLS` | tools | `16` (1–256) | no | int | run | exhausted |
@@ -177,6 +180,7 @@ Gateway requires `goalId` + `threadId` + act-as (non-test) and a successful `/re
 7. **Ads domain / provider bots are not implemented** in gateway. `ADS_DOMAIN_URL` empty fails closed. No Reddit/Microsoft/Google/Meta credentials here.
 7b. **Research review is a gateway slice only.** Default `RESEARCH_HTTP_FETCH=false` (unconfigured, honest failure). `ads.create_campaign` cannot use a model-invented URL or skip an accepted current artifact. Hub/web/protocol UX is not in this repo (`docs/RESEARCH_REVIEW_CONTRACT.md`). No default landing URL.
 8. **Analytics metrics/schema are incomplete** for live campaigns (audit stubs; Context analytics source can gap). Gateway `review_performance` now **evaluates** in-scope Context items (unknown ≠ 0) and emits audited report/no_action/blocked/dry-run proposal. It does not execute Ads, pay for LLM, or grant spend. Hub cadence/coalescing is documented in `docs/ANALYTICS_EVALUATOR.md` and is **not implemented in Hub here**.
+8b. **Owner action policies** (`docs/ACTION_POLICIES.md`): default Hub **approval**. `auto_with_limits` is owner-published, scoped, versioned, and cannot relax auth/isolation/freshness/budget/URL acceptance or grant spend. Cap auto needs Hub `currentDailyBudget` (unknown is not zero). Cross-provider budget moves are denied as a side effect (`ads.move_budget` is catalogued but not allowlisted). Delegation cannot be enabled. Evaluator proposals are not execution authority. Hub scheduling/proposal UX is documented only. There is no env flag that globally enables auto.
 9. **Approval persistence:** gateway stores pending approval on the run record; Hub owns the user ask. Cross-service resume bindings were a Hub task; treat as **implemented in Hub branch / untested end-to-end from this gateway PR**.
 10. **Audit in gateway is producer + local replay**, not ClickHouse verification.
 11. **No fictional real balance.** Unknown quota/cost/pricing/ad funds stay unknown.
@@ -298,3 +302,5 @@ Infra (hosting, Redis, ClickHouse) is **out of this formula**.
 | DeepSeek list prices | https://api-docs.deepseek.com/quick_start/pricing/ (fetched 2026-11-08) |
 | Production npm audit baseline | `proba-llm-gateway/scripts/prod-audit-baseline.json` (empty after Fastify 5 / Zod 4) |
 | Protocol pin | `proba-llm-gateway/package.json` `github:smallseedlabs/proba-protocol#v0.6.0` |
+| Analytics evaluator | `proba-llm-gateway/docs/ANALYTICS_EVALUATOR.md` |
+| Owner action policies | `proba-llm-gateway/docs/ACTION_POLICIES.md`, `src/action-policy/` |

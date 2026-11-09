@@ -40,6 +40,8 @@ services:
       RESEARCH_STORE_DIR: /app/data/research
       RESEARCH_HTTP_FETCH: "false"
       ANALYTICS_STORE_DIR: /app/data/analytics
+      ACTION_POLICY_STORE_DIR: /app/data/action-policies
+      ACTION_OUTCOME_STORE_DIR: /app/data/action-outcomes
     secrets:
       - hub_service_jwks
       - hub_assertion_jwks

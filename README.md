@@ -67,6 +67,22 @@ Hub cadence/coalescing contract (Hub work later; not this PR), and t140
 (page creation + gVisor limb builder deferred; URL origin is the operator
 or a future page service with provenance — **no hardcoded host**).
 
+## Owner action policies
+
+Default for Ads verbs is Hub **approval**. An owner-published, versioned
+document may set `deny` or `auto_with_limits` for a scoped verb. Auto skips
+**Hub approval only** for pause / known cap-decrease after immutable
+preflight; it still uses the Ads port, still fails closed when Ads is
+unconfigured, and **never grants spend**. Delegation cannot be enabled.
+Cross-provider budget movement is a separate catalogued, not-allowlisted
+verb. Evaluator dry-run proposals are not execution authority.
+
+Hub scheduling, coalescing, and proposal UX are a contract in
+[docs/ACTION_POLICIES.md](docs/ACTION_POLICIES.md) — **not implemented in
+Hub here**. This gateway has no public policy HTTP API in this slice;
+production uses `ACTION_POLICY_STORE_DIR` / `ACTION_OUTCOME_STORE_DIR`
+files (same single-replica caveat as the run store).
+
 This gateway remains the **only** bounded command path for paid/mutating
 work: Context packet → optional LLM turn → catalog verbs → Hub approval →
 Ads domain. Audit stores events; it must not execute.
@@ -81,9 +97,13 @@ Preflight already matches the intended policy and must stay that way:
   a `probaCampaignId` must exist, billing **only** for spend increase
   (create, resume, budget up). Analysis, report, and pause may relax **ad
   balance**, never auth or model caps.
-- Targeting edits are not automatically safe. Stop/cap **safety** is a
-  deterministic dry-run path here; execution stays behind Hub approval +
-  Ads, which this slice does not call.
+- Targeting edits are not automatically safe. Owner **action policies**
+  (`docs/ACTION_POLICIES.md`) default to Hub approval. `auto_with_limits`
+  may skip Hub approval only for scoped pause/cap-decrease after immutable
+  preflight; it still uses the Ads port (unconfigured fails closed) and
+  **never grants spend**. Evaluator dry-run is not execution. Cross-provider
+  budget moves are a separate denied verb. Hub scheduling/UX is documented,
+  not implemented.
 - Idempotency and ambiguous outcomes: no blind retry. Campaign decision
   version is the Context `asOf` stored per campaign in this process.
 

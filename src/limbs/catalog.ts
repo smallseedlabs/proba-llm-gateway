@@ -156,6 +156,28 @@ export const VERB_CATALOG: readonly VerbDefinition[] = [
   }),
   verb({
     limb: 'ads',
+    verb: 'move_budget',
+    name: 'ads.move_budget',
+    description:
+      'Explicit cross-provider or cross-account budget movement. Not a side effect of pause/cap. Not allowlisted in this slice.',
+    parameters: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['fromPlatform', 'toPlatform', 'amount'],
+      properties: {
+        fromPlatform: { type: 'string', enum: ['reddit', 'microsoft', 'google', 'meta'] },
+        toPlatform: { type: 'string', enum: ['reddit', 'microsoft', 'google', 'meta'] },
+        amount: { type: 'number' },
+      },
+    },
+    risk: 'high',
+    sideEffecting: true,
+    requiresApproval: true,
+    allowlisted: false,
+    platforms: ['reddit', 'microsoft', 'google', 'meta'],
+  }),
+  verb({
+    limb: 'ads',
     verb: 'resume_campaign',
     name: 'ads.resume_campaign',
     description: 'Resume a Proba campaign by probaCampaignId. Domain maps to the provider resource.',

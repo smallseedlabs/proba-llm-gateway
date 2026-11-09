@@ -14,3 +14,5 @@ export { MemoryResearchStore } from '../research/memory-store.js';
 export { FileResearchStore } from '../research/file-store.js';
 export { MemoryAnalyticsStore } from '../analytics/memory-store.js';
 export { FileAnalyticsStore } from '../analytics/file-store.js';
+export { MemoryActionPolicyStore, MemoryActionOutcomeStore } from '../action-policy/memory-store.js';
+export { FileActionPolicyStore, FileActionOutcomeStore } from '../action-policy/file-store.js';

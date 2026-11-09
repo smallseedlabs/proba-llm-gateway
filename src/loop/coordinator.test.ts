@@ -24,6 +24,7 @@ import type { LimbExecutor } from '../ports/limbs.js';
 import type { AdsDomainPort } from '../ports/ads.js';
 import { MemoryResearchStore } from '../research/memory-store.js';
 import { MemoryAnalyticsStore } from '../analytics/memory-store.js';
+import { MemoryActionOutcomeStore, MemoryActionPolicyStore } from '../action-policy/memory-store.js';
 import { seedAcceptedResearch, TEST_LANDING_URL, userLanding } from '../testing/research.js';
 import type { ResearchArtifactStore, ResearchProviderPort } from '../ports/research.js';
 import { SourcedResearchProvider } from '../testing/research.js';
@@ -64,6 +65,8 @@ function coordinator(input: {
       ads,
       researchStore,
       analyticsStore: new MemoryAnalyticsStore('test'),
+      actionPolicyStore: new MemoryActionPolicyStore('test'),
+      actionOutcomeStore: new MemoryActionOutcomeStore('test'),
     }),
   };
 }

@@ -10,6 +10,8 @@ import {
 import type { AdsDomainPort } from '../ports/ads.js';
 import type { ResearchArtifactStore } from '../ports/research.js';
 import type { AnalyticsDecisionStore } from '../analytics/store.js';
+import type { ActionOutcomeStore, ActionPolicyStore } from '../action-policy/store.js';
+import { campaignIdOf, evaluateActionPolicy } from '../action-policy/evaluate.js';
 import { runAnalyticsReview } from './analytics-review.js';
 import { verbByName } from '../limbs/catalog.js';
 import { applyResearchResume, isResearchAcceptPending } from '../research/acceptance.js';
@@ -55,6 +57,8 @@ export interface LoopBodyDeps {
   ads: AdsDomainPort;
   researchStore: ResearchArtifactStore;
   analyticsStore: AnalyticsDecisionStore;
+  actionPolicyStore: ActionPolicyStore;
+  actionOutcomeStore: ActionOutcomeStore;
   persist: (record: RunRecord) => Promise<void>;
   relay: (record: RunRecord) => Promise<void>;
 }
@@ -352,6 +356,47 @@ async function dispatchTools(
     }
 
     const argsHash = canonicalArgsHash(decision.args);
+    const documents = await deps.actionPolicyStore.list(request.workspaceId);
+    const campaignId = campaignIdOf(decision.args, request);
+    const lastOutcome = await deps.actionOutcomeStore.get({
+      workspaceId: request.workspaceId,
+      userId: request.userId,
+      verb: decision.verb.name,
+      probaCampaignId: campaignId,
+      argsHash,
+    });
+    const action = evaluateActionPolicy({
+      verb: decision.verb,
+      args: decision.args,
+      request,
+      documents,
+      last: lastOutcome,
+      now: deps.clock.now(),
+    });
+    record.events.push(
+      gatewayAuditEvent(request, {
+        action: action.mode === 'deny' ? 'policy.denied' : 'brain.decision_made',
+        outcome: action.mode === 'deny' ? 'denied' : 'success',
+        occurredAt: deps.clock.isoNow(),
+        details: {
+          evaluator: 'action_policy',
+          verb: decision.verb.name,
+          mode: action.mode,
+          policyId: action.policyId,
+          policyVersion: action.policyVersion,
+          grantsSpend: false,
+          requiresHubApproval: action.requiresHubApproval,
+          clampedFromAuto: action.clampedFromAuto,
+          gate: action.gate,
+          immutable: action.immutable,
+          argsHash,
+        },
+      })
+    );
+    if (action.mode === 'deny') {
+      throw new PolicyDeniedError(action.gate?.message ?? `${decision.verb.name} is denied by owner policy`);
+    }
+
     const existing = record.toolTurns.find((t) => t.toolCallId === call.id && t.argsHash === argsHash);
     if (existing?.state === 'completed' && existing.result) {
       record.messages.push({ role: 'tool', content: JSON.stringify(existing.result), toolCallId: call.id });
@@ -373,7 +418,7 @@ async function dispatchTools(
       throw new PolicyDeniedError('approval does not bind this operation, arguments and workspace');
     }
     const resume = request.resume ?? record.lastResume;
-    const approval = decision.verb.requiresApproval
+    const approval = action.requiresHubApproval
       ? deps.approval.decide(
           {
             askId,
@@ -525,9 +570,34 @@ async function dispatchTools(
           action: result.ok ? 'tool.executed' : 'tool.failed',
           outcome: result.ok ? 'success' : 'failure',
           occurredAt: deps.clock.isoNow(),
-          details: { verb: decision.verb.name, argsHash },
+          details: {
+            verb: decision.verb.name,
+            argsHash,
+            actionPolicyMode: action.mode,
+            policyId: action.policyId,
+            policyVersion: action.policyVersion,
+            grantsSpend: false,
+            hubApproval: action.requiresHubApproval,
+          },
         })
       );
+      if (result.ok && action.mode === 'auto_with_limits' && action.gate?.code !== 'cooldown') {
+        const cooldownMs = documents.find((d) => d.policyId === action.policyId)?.limits?.cooldownMs ?? deps.config.actionPolicy.cooldownMs;
+        await deps.actionOutcomeStore.put({
+          workspaceId: request.workspaceId,
+          userId: request.userId,
+          verb: decision.verb.name,
+          probaCampaignId: campaignId,
+          argsHash,
+          policyId: action.policyId,
+          policyVersion: action.policyVersion,
+          mode: 'auto_with_limits',
+          outcome: 'auto_executed',
+          occurredAt: deps.clock.isoNow(),
+          cooldownUntil: new Date(deps.clock.now().getTime() + cooldownMs).toISOString(),
+          grantsSpend: false,
+        });
+      }
       await deps.persist(record);
       await deps.relay(record);
       if (decision.verb.name === 'research.gather' && result.ok) {

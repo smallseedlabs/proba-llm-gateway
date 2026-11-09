@@ -17,6 +17,12 @@ describe('loadConfig', () => {
     expect(loadConfig({ NODE_ENV: 'test', RESEARCH_HTTP_FETCH: 'true' }).research.httpFetchEnabled).toBe(true);
   });
 
+  it('defaults action policies to Hub approval with no live delegation', () => {
+    const cfg = loadConfig({ NODE_ENV: 'test' });
+    expect(cfg.actionPolicy.cooldownMs).toBeGreaterThan(0);
+    expect(cfg.actionPolicy.storeDir).toBe('');
+  });
+
   it('defaults analytics evaluator gates without inventing a spend ceiling', () => {
     const cfg = loadConfig({ NODE_ENV: 'test' });
     expect(cfg.analytics.maxAgeMs).toBe(6 * 60 * 60 * 1000);
