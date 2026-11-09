@@ -14,7 +14,10 @@ import { seedAcceptedResearch } from '../testing/research.js';
 const ctx = {
   workspaceId: 'seedbed',
   userId: '11111111-1111-4111-8111-111111111111',
-  userSuppliedInput: { landingPageUrl: 'https://example.com/offer' },
+  userSuppliedInput: {
+    landingPageUrl: 'https://example.com/offer',
+    creative: { type: 'TEXT', headline: 'FAKE headline', body: 'FAKE approved body' },
+  },
 };
 
 const createArgs = {
@@ -137,5 +140,34 @@ describe('limb policy and domain executor', () => {
     };
     expect(gate.decide(intent)).toEqual({ status: 'pending' });
     expect(gate.decide(intent, { askId: intent.askId, choice: 'approve' })).toEqual({ status: 'pending' });
+  });
+
+  it('injects only operator-approved creative/targeting on create; the model cannot author creative', () => {
+    const allowed = policy.evaluate('ads.create_campaign', createArgs, {
+      ...ctx,
+      userSuppliedInput: { ...ctx.userSuppliedInput, targeting: { communities: ['FAKEsub'] } },
+    });
+    expect(allowed).toMatchObject({
+      allowed: true,
+      args: {
+        creative: { type: 'TEXT', headline: 'FAKE headline', body: 'FAKE approved body' },
+        targeting: { communities: ['FAKEsub'] },
+      },
+    });
+    expect(
+      policy.evaluate('ads.create_campaign', { ...createArgs, creative: { type: 'TEXT', headline: 'x', body: 'y' } }, ctx)
+    ).toMatchObject({ allowed: false, code: 'schema' });
+    expect(
+      policy.evaluate('ads.create_campaign', createArgs, { ...ctx, userSuppliedInput: { landingPageUrl: 'https://example.com/offer' } })
+    ).toMatchObject({ allowed: false, code: 'user_input' });
+    expect(
+      policy.evaluate('ads.create_campaign', createArgs, {
+        ...ctx,
+        userSuppliedInput: {
+          landingPageUrl: 'https://example.com/offer',
+          creative: { type: 'IMAGE', headline: 'h', mediaUrl: 'http://127.0.0.1/x.png' },
+        },
+      })
+    ).toMatchObject({ allowed: false, code: 'user_input' });
   });
 });

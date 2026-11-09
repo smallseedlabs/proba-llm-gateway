@@ -93,7 +93,30 @@ export class CatalogPolicyEngine implements PolicyEngine {
       if (verb.name === 'research.gather') {
         return { allowed: true, verb, args: { ...rawArgs, url: userUrl } };
       }
-      return { allowed: true, verb, args: { ...rawArgs, landingPageUrl: userUrl } };
+      const creative = ctx.userSuppliedInput?.creative;
+      if (!creative) {
+        return {
+          allowed: false,
+          code: 'user_input',
+          reason:
+            'ads.create_campaign requires operator-approved creative (userSuppliedInput.creative) so Ads can create the post; the model cannot author ad copy or media',
+        };
+      }
+      const imageUrl = typeof creative.mediaUrl === 'string' ? normalizeLandingPageUrl(creative.mediaUrl) : undefined;
+      if (creative.type === 'IMAGE' && !imageUrl) {
+        return { allowed: false, code: 'user_input', reason: 'creative.mediaUrl must be a public https URL supplied by the operator' };
+      }
+      const targeting = ctx.userSuppliedInput?.targeting;
+      return {
+        allowed: true,
+        verb,
+        args: {
+          ...rawArgs,
+          landingPageUrl: userUrl,
+          creative: imageUrl ? { ...creative, mediaUrl: imageUrl } : { ...creative },
+          ...(targeting ? { targeting: { ...targeting } } : {}),
+        },
+      };
     }
     if (verb.name === 'research.accept') {
       return { allowed: false, code: 'allowlist', reason: 'research.accept is Hub-mediated and is not a model tool' };

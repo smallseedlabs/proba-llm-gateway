@@ -79,6 +79,15 @@ export async function seedAcceptedResearch(
   return artifact;
 }
 
-export function userLanding(url = TEST_LANDING_URL): { landingPageUrl: string } {
-  return { landingPageUrl: url };
+/** FAKE: operator-approved creative fixture (no real copy, no real media host). */
+export const TEST_APPROVED_CREATIVE = {
+  type: 'TEXT' as const,
+  headline: 'FAKE fixture headline',
+  body: 'FAKE fixture body copy approved by the operator in tests',
+};
+
+export function userLanding(
+  url = TEST_LANDING_URL
+): { landingPageUrl: string; creative: typeof TEST_APPROVED_CREATIVE } {
+  return { landingPageUrl: url, creative: { ...TEST_APPROVED_CREATIVE } };
 }

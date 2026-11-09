@@ -9,6 +9,8 @@ import { parsePublicHttpUrl, UnsafeUrlError } from './ssrf.js';
 
 export interface UserSuppliedInput {
   landingPageUrl: string;
+  creative?: Record<string, unknown>;
+  targeting?: Record<string, unknown>;
 }
 
 export interface ResearchBinding {

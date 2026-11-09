@@ -111,6 +111,19 @@ describe('research review artifact', () => {
     expect(done.status).toBe('completed');
     expect(ads.calls).toHaveLength(1);
     expect(ads.calls[0]?.args.landingPageUrl).toBe(TEST_LANDING_URL);
+    // Operator-approved creative is forwarded for Ads post creation; research
+    // binding + gateway attestation are forwarded for Ads verification.
+    expect(ads.calls[0]?.args.creative).toMatchObject({ type: 'TEXT', headline: 'FAKE fixture headline' });
+    expect(ads.calls[0]?.args.researchAcceptance).toEqual({
+      artifactId: accepted!.artifactId,
+      version: accepted!.version,
+      inputRevision: accepted!.inputRevision,
+    });
+    expect(ads.calls[0]?.args.researchAttestation).toMatchObject({
+      status: 'accepted',
+      landingPageUrl: TEST_LANDING_URL,
+      acceptedAt: accepted!.acceptedAt,
+    });
   });
 
   it('refuses model-invented landing URLs and does not call Ads', async () => {
