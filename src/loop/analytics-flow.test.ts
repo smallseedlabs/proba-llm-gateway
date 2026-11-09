@@ -16,6 +16,7 @@ import type { BrainOutput } from '../protocol.js';
 import { MemoryResearchStore } from '../research/memory-store.js';
 import { UnconfiguredResearchProvider } from '../research/unconfigured.js';
 import { MemoryAnalyticsStore } from '../analytics/memory-store.js';
+import { MemoryActionOutcomeStore, MemoryActionPolicyStore } from '../action-policy/memory-store.js';
 import { FileAnalyticsStore } from '../analytics/file-store.js';
 import { fakeAnalyticsPacket, FAKE_ACCOUNT, FAKE_PROBA_CAMPAIGN } from '../testing/analytics.js';
 
@@ -56,6 +57,8 @@ function loop(input: {
       ads,
       researchStore,
       analyticsStore,
+      actionPolicyStore: new MemoryActionPolicyStore('test'),
+      actionOutcomeStore: new MemoryActionOutcomeStore('test'),
     }),
   };
 }

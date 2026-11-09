@@ -45,6 +45,13 @@ export interface LlmClientConfig {
   quotaUnknownPolicy: 'allow_with_run_budget' | 'refuse';
 }
 
+export interface ActionPolicyConfig {
+  /** Per-action cooldown after auto_with_limits execute. Owner document may tighten. */
+  cooldownMs: number;
+  storeDir: string;
+  outcomeStoreDir: string;
+}
+
 export interface AnalyticsConfig {
   /** Max age of Context analytics asOf. Stale → no_action, not a zero fill. */
   maxAgeMs: number;
@@ -145,6 +152,7 @@ export interface GatewayServiceConfig {
   ads: AdsDomainConfig;
   research: ResearchConfig;
   analytics: AnalyticsConfig;
+  actionPolicy: ActionPolicyConfig;
   limits: LimitsConfig;
   audit: AuditConfig;
   runStoreDir: string;

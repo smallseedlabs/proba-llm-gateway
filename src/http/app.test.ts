@@ -16,6 +16,7 @@ import { testRunRequest, testTurn } from '../testing/fixtures.js';
 import { createLogger } from '../logger.js';
 import { MemoryResearchStore } from '../research/memory-store.js';
 import { MemoryAnalyticsStore } from '../analytics/memory-store.js';
+import { MemoryActionOutcomeStore, MemoryActionPolicyStore } from '../action-policy/memory-store.js';
 import { UnconfiguredResearchProvider } from '../research/unconfigured.js';
 
 describe('HTTP gateway', () => {
@@ -42,6 +43,8 @@ describe('HTTP gateway', () => {
         ads,
         researchStore,
         analyticsStore: new MemoryAnalyticsStore('test'),
+        actionPolicyStore: new MemoryActionPolicyStore('test'),
+        actionOutcomeStore: new MemoryActionOutcomeStore('test'),
       }),
       auth: new ServiceTokenAuth({
         keys: signer.keys,
@@ -96,6 +99,8 @@ describe('HTTP gateway', () => {
         ads,
         researchStore,
         analyticsStore: new MemoryAnalyticsStore('test'),
+        actionPolicyStore: new MemoryActionPolicyStore('test'),
+        actionOutcomeStore: new MemoryActionOutcomeStore('test'),
       }),
       auth: new ServiceTokenAuth({
         keys: signer.keys,

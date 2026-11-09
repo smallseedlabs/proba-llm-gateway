@@ -53,6 +53,11 @@ export function testConfig(overrides: Partial<GatewayServiceConfig> = {}): Gatew
       maxProposalDecreasePct: 0.5,
       storeDir: '',
     },
+    actionPolicy: {
+      cooldownMs: 6 * 60 * 60 * 1000,
+      storeDir: '',
+      outcomeStoreDir: '',
+    },
     limits: {
       maxRequestBytes: 262_144,
       rateLimitMax: 60,

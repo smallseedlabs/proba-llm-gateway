@@ -132,6 +132,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayService
   if (nodeEnv === 'production' && !analyticsStoreDir) {
     throw new ConfigError('ANALYTICS_STORE_DIR is required when NODE_ENV=production');
   }
+  const actionPolicyStoreDir = (env.ACTION_POLICY_STORE_DIR ?? (nodeEnv === 'test' ? '' : 'data/action-policies')).trim();
+  if (nodeEnv === 'production' && !actionPolicyStoreDir) {
+    throw new ConfigError('ACTION_POLICY_STORE_DIR is required when NODE_ENV=production');
+  }
+  const actionOutcomeStoreDir = (env.ACTION_OUTCOME_STORE_DIR ?? (nodeEnv === 'test' ? '' : 'data/action-outcomes')).trim();
+  if (nodeEnv === 'production' && !actionOutcomeStoreDir) {
+    throw new ConfigError('ACTION_OUTCOME_STORE_DIR is required when NODE_ENV=production');
+  }
 
   if (env.INGRESS_PUBLIC?.trim() === 'true') {
     throw new ConfigError('INGRESS_PUBLIC=true is refused: proba-llm-gateway is an internal service with no public ingress default');
@@ -207,6 +215,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayService
         return parsed;
       })(),
       storeDir: analyticsStoreDir,
+    },
+    actionPolicy: {
+      cooldownMs: envInt(env, 'ACTION_POLICY_COOLDOWN_MS', 6 * 60 * 60 * 1000, 0, 30 * 24 * 60 * 60 * 1000),
+      storeDir: actionPolicyStoreDir,
+      outcomeStoreDir: actionOutcomeStoreDir,
     },
     limits: {
       maxRequestBytes: envInt(env, 'GATEWAY_MAX_REQUEST_BYTES', 262_144, 1024, 2_000_000),
