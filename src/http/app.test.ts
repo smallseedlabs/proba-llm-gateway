@@ -130,3 +130,26 @@ describe('HTTP gateway', () => {
     await app.close();
   });
 });
+
+describe('blockedRunLogFields', () => {
+  it('logs a blocked run with its capability needs and reason, and nothing for other statuses', async () => {
+    const { blockedRunLogFields } = await import('./app.js');
+    const usage = { promptTokens: 0, completionTokens: 0, toolCalls: 0, costUsd: 0 } as never;
+    const blocked = {
+      runId: '3671968b-3bd5-442c-9cb4-6140364d7637',
+      status: 'blocked',
+      iteration: 0,
+      usage,
+      needs: [{ type: 'capability', capability: 'run.budget', state: 'unknown', message: 'no unit price' }],
+      error: { code: 'preflight_blocked', message: 'no unit price', retryable: true },
+    } as never;
+    expect(blockedRunLogFields(blocked, 'trace-1')).toEqual({
+      runId: '3671968b-3bd5-442c-9cb4-6140364d7637',
+      traceId: 'trace-1',
+      errorCode: 'preflight_blocked',
+      reason: 'no unit price',
+      needs: [{ capability: 'run.budget', state: 'unknown', message: 'no unit price' }],
+    });
+    expect(blockedRunLogFields({ ...(blocked as object), status: 'completed' } as never)).toBeNull();
+  });
+});
