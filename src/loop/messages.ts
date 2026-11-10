@@ -2,6 +2,7 @@ import type { ContextPacket } from '../protocol.js';
 import type { LlmMessage } from '../types/llm.js';
 import type { HubRunRequest } from '../types/run.js';
 import { llmToolDefinitions } from '../limbs/catalog.js';
+import { normalizeLandingPageUrl } from '../research/input.js';
 
 const SYSTEM_RULES = [
   'You are the Proba brain inside the gateway harness.',
@@ -35,18 +36,36 @@ export function commandToUserText(request: HubRunRequest): string {
   return JSON.stringify({ type: request.command.type, payload: request.command.payload });
 }
 
-export function initialMessages(packet: ContextPacket | undefined, request: HubRunRequest): LlmMessage[] {
+/**
+ * The operator URL Hub authenticated for this run. Follow-up commands (send_message) do not
+ * carry it in their payload, so without this the model guesses a URL and policy refuses it.
+ * Policy still checks every tool URL against request.userSuppliedInput.
+ */
+function operatorInputLine(request: HubRunRequest | undefined): string {
+  const url = normalizeLandingPageUrl(request?.userSuppliedInput?.landingPageUrl);
+  return url ? `\n\nOperator-supplied landing page URL for this goal (use exactly this for research.gather and ads.create_campaign): ${url}` : '';
+}
+
+function systemText(packet: ContextPacket | undefined, request: HubRunRequest | undefined): string {
   const contextBlock = packet ? packetToText(packet) : '';
-  const system = contextBlock ? `${SYSTEM_RULES}\n\nRelevant context:\n${contextBlock}` : SYSTEM_RULES;
+  const base = `${SYSTEM_RULES}${operatorInputLine(request)}`;
+  return contextBlock ? `${base}\n\nRelevant context:\n${contextBlock}` : base;
+}
+
+export function initialMessages(packet: ContextPacket | undefined, request: HubRunRequest): LlmMessage[] {
+  const system = systemText(packet, request);
   return [
     { role: 'system', content: system },
     { role: 'user', content: commandToUserText(request) },
   ];
 }
 
-export function refreshSystem(messages: LlmMessage[], packet: ContextPacket | undefined): LlmMessage[] {
-  const contextBlock = packet ? packetToText(packet) : '';
-  const system = contextBlock ? `${SYSTEM_RULES}\n\nRelevant context:\n${contextBlock}` : SYSTEM_RULES;
+export function refreshSystem(
+  messages: LlmMessage[],
+  packet: ContextPacket | undefined,
+  request?: HubRunRequest
+): LlmMessage[] {
+  const system = systemText(packet, request);
   const rest = messages.filter((m) => m.role !== 'system');
   return [{ role: 'system', content: system }, ...rest];
 }

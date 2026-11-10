@@ -149,7 +149,7 @@ export async function runBoundedLoop(
     }
     const iteration = usage.recordIteration();
     record.iteration = iteration;
-    record.messages = record.messages.length === 0 ? initialMessages(packet, request) : refreshSystem(record.messages, packet);
+    record.messages = record.messages.length === 0 ? initialMessages(packet, request) : refreshSystem(record.messages, packet, request);
 
     usage.assertCanCallLlm();
     const turn = await callLlm(deps, record, request, cancellation, usage, offeredToolFilter(preflight.offeredLimbs));
