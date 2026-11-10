@@ -22,6 +22,7 @@ import type { AuditPublisher } from '../ports/audit-publisher.js';
 import type { Clock } from '../ports/clock.js';
 import { redactDetails } from '../redact.js';
 import type { Logger } from '../logger.js';
+import type { RunSnapshot } from '../types/run.js';
 import { SlidingWindowRateLimiter } from './rate-limit.js';
 
 export const SERVICE_NAME = GATEWAY_SERVICE_NAME;
@@ -130,6 +131,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     request.raw.on('close', () => controller.abort());
     try {
       const snapshot = await deps.coordinator.start(body, caller, controller.signal);
+      logRunOutcome(deps, snapshot, body.traceId);
       return reply.status(200).send(snapshot);
     } catch (err) {
       return mapRunError(deps, reply, err, body.traceId);
@@ -165,6 +167,32 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
 
   return app;
+}
+
+/**
+ * A blocked run is a deliberate refusal (no paid call). It is already audited as policy.denied; this puts the
+ * same reason in the container log so an operator sees it next to the Hub's error. Only capability names,
+ * states and gateway policy messages are logged, never request content or tokens.
+ */
+export function blockedRunLogFields(snapshot: RunSnapshot, traceId?: string): Record<string, unknown> | null {
+  if (snapshot.status !== 'blocked') return null;
+  const needs = (snapshot.needs ?? []).flatMap((n) => {
+    if (!n || typeof n !== 'object') return [];
+    const need = n as Record<string, unknown>;
+    return [
+      {
+        capability: typeof need.capability === 'string' ? need.capability : undefined,
+        state: typeof need.state === 'string' ? need.state : undefined,
+        message: typeof need.message === 'string' ? need.message.slice(0, 300) : undefined,
+      },
+    ];
+  });
+  return { runId: snapshot.runId, traceId, errorCode: snapshot.error?.code, reason: snapshot.error?.message?.slice(0, 300), needs };
+}
+
+function logRunOutcome(deps: AppDeps, snapshot: RunSnapshot, traceId?: string): void {
+  const fields = blockedRunLogFields(snapshot, traceId);
+  if (fields) deps.logger.warn(fields, 'run blocked by preflight');
 }
 
 function mapRunError(deps: AppDeps, reply: FastifyReply, err: unknown, traceId?: string): FastifyReply {
