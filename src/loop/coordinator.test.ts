@@ -696,6 +696,83 @@ describe('loop coordinator', () => {
     expect(again.status).toBe('failed');
     expect(llm.completeCalls).toBe(1);
   });
+
+  it('keeps valid tool_calls -> tool message ordering when one assistant turn emits research.gather + page.attach_user_page', async () => {
+    const llm = new ScriptedLlmClient([
+      testTurn({
+        finishReason: 'tool_calls',
+        message: {
+          role: 'assistant',
+          content: 'Gathering research and attaching page',
+          toolCalls: [
+            { id: 'call-gather', name: 'research.gather', arguments: JSON.stringify({ url: TEST_LANDING_URL }) },
+            { id: 'call-attach', name: 'page.attach_user_page', arguments: JSON.stringify({ url: TEST_LANDING_URL }) },
+          ],
+        },
+      }),
+      testTurn({ message: { role: 'assistant', content: 'both tools completed' } }),
+    ]);
+    const { coordinator: loop, runs } = coordinator({ llm });
+    const req = landingReq({ idempotencyKey: '21212121-2121-4212-8212-212121212121' });
+
+    const step1 = await loop.start(req, testCaller());
+    expect(step1.status).toBe('awaiting_approval');
+    const acceptNeed = step1.needs?.[0] as { askId: string; verb: string };
+    expect(acceptNeed.verb).toBe('research.accept');
+
+    const step2 = await loop.start({ ...req, resume: { askId: acceptNeed.askId, choice: 'approve' } }, testCaller());
+    expect(step2.status).toBe('awaiting_approval');
+    const attachNeed = step2.needs?.[0] as { askId: string; verb: string };
+    expect(attachNeed.verb).toBe('page.attach_user_page');
+
+    const step3 = await loop.start({ ...req, resume: { askId: attachNeed.askId, choice: 'approve' } }, testCaller());
+    expect(step3.status).toBe('completed');
+    expect(llm.completeCalls).toBe(2);
+
+    const saved = await runs.getByRunId(step3.runId);
+    const roles = saved?.messages.map((m) => `${m.role}:${m.toolCalls?.map((t) => t.id).join(',') ?? m.toolCallId ?? ''}`);
+    expect(roles).toEqual([
+      'system:',
+      'user:',
+      'assistant:call-gather,call-attach',
+      'tool:call-gather',
+      'tool:call-attach',
+    ]);
+  });
+
+  it('synthesizes tool rejection messages for remaining tool calls when research.accept is rejected', async () => {
+    const llm = new ScriptedLlmClient([
+      testTurn({
+        finishReason: 'tool_calls',
+        message: {
+          role: 'assistant',
+          content: 'Gathering research and attaching page',
+          toolCalls: [
+            { id: 'call-gather', name: 'research.gather', arguments: JSON.stringify({ url: TEST_LANDING_URL }) },
+            { id: 'call-attach', name: 'page.attach_user_page', arguments: JSON.stringify({ url: TEST_LANDING_URL }) },
+          ],
+        },
+      }),
+      testTurn({ message: { role: 'assistant', content: 'acknowledged rejection' } }),
+    ]);
+    const { coordinator: loop, runs } = coordinator({ llm });
+    const req = landingReq({ idempotencyKey: '22222222-2222-4222-8222-222222222222' });
+
+    const step1 = await loop.start(req, testCaller());
+    const acceptNeed = step1.needs?.[0] as { askId: string; verb: string };
+    const step2 = await loop.start({ ...req, resume: { askId: acceptNeed.askId, choice: 'reject' } }, testCaller());
+    expect(step2.status).toBe('completed');
+
+    const saved = await runs.getByRunId(step2.runId);
+    const roles = saved?.messages.map((m) => `${m.role}:${m.toolCalls?.map((t) => t.id).join(',') ?? m.toolCallId ?? ''}`);
+    expect(roles).toEqual([
+      'system:',
+      'user:',
+      'assistant:call-gather,call-attach',
+      'tool:call-gather',
+      'tool:call-attach',
+    ]);
+  });
 });
 
 async function waitFor(probe: () => Promise<boolean>, timeoutMs = 2000): Promise<void> {

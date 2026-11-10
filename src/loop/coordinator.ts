@@ -151,7 +151,11 @@ export class LoopCoordinator {
     const fingerprint = requestFingerprint(request);
     let record = await this.deps.runs.get(key);
     if (record) {
-      if (record.fingerprint !== fingerprint && record.fingerprint !== legacyRequestFingerprint(request)) {
+      if (
+        record.fingerprint !== fingerprint &&
+        record.fingerprint !== legacyRequestFingerprint(request) &&
+        requestFingerprint(record.request) !== fingerprint
+      ) {
         await this.auditIdempotencyConflict(request, record);
         throw new IdempotencyConflictError();
       }

@@ -311,13 +311,12 @@ async function dispatchTools(
   usage: RunUsageLedger,
   assistant?: TurnResponse['message']
 ): Promise<void> {
-  const alreadyAssistant = record.messages[record.messages.length - 1]?.role === 'assistant';
-  if (!alreadyAssistant) {
+  if (assistant) {
     record.messages.push({
       role: 'assistant',
-      content: assistant?.content ?? '',
+      content: assistant.content ?? '',
       toolCalls,
-      ...(assistant?.reasoningContent != null && assistant.reasoningContent !== ''
+      ...(assistant.reasoningContent != null && assistant.reasoningContent !== ''
         ? { reasoningContent: assistant.reasoningContent }
         : {}),
     });
@@ -757,8 +756,22 @@ async function settleResearchAcceptance(
   request.resume = undefined;
   record.state = 'running';
   record.snapshot = undefined;
+  if (outcome !== 'accepted') {
+    for (const call of leftover) {
+      record.messages.push({
+        role: 'tool',
+        content: JSON.stringify({
+          ok: false,
+          code: 'research_rejected',
+          message: 'skipped because research artifact was not accepted',
+        }),
+        toolCallId: call.id,
+      });
+    }
+    await deps.persist(record);
+    return [];
+  }
   await deps.persist(record);
-  if (outcome !== 'accepted') return [];
   return leftover;
 }
 
