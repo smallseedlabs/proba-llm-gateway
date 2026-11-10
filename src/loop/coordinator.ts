@@ -18,7 +18,7 @@ import {
   ToolRefusedError,
   WorkspaceScopeError,
 } from '../errors.js';
-import { hashedRunKey, requestFingerprint } from '../audit/fingerprint.js';
+import { hashedRunKey, legacyRequestFingerprint, requestFingerprint } from '../audit/fingerprint.js';
 import { validateCommandPayload } from '../protocol.js';
 import type { JWTVerifyGetKey } from 'jose';
 import type { ApprovalGate } from '../ports/approval.js';
@@ -151,7 +151,10 @@ export class LoopCoordinator {
     const fingerprint = requestFingerprint(request);
     let record = await this.deps.runs.get(key);
     if (record) {
-      if (record.fingerprint !== fingerprint) throw new IdempotencyConflictError();
+      if (record.fingerprint !== fingerprint && record.fingerprint !== legacyRequestFingerprint(request)) {
+        await this.auditIdempotencyConflict(request, record);
+        throw new IdempotencyConflictError();
+      }
       this.assertRecordAccess(record, caller);
       if (record.state === 'awaiting_approval' && request.resume) {
         record.lastResume = request.resume;
@@ -262,6 +265,30 @@ export class LoopCoordinator {
       persist: (row: RunRecord) => this.deps.runs.put(row),
       relay: (row: RunRecord) => this.relay(row),
     };
+  }
+
+  /** A conflicting reuse never reaches the run loop, so it is audited (and logged) here. Best effort. */
+  private async auditIdempotencyConflict(request: HubRunRequest, record: RunRecord): Promise<void> {
+    try {
+      await this.deps.audit.publish(
+        gatewayAuditEvent(request, {
+          action: 'command.rejected',
+          outcome: 'denied',
+          occurredAt: this.deps.clock.isoNow(),
+          errorCode: 'idempotency_conflict',
+          errorMessage: 'idempotency key was reused with a different request',
+          details: {
+            runId: record.runId,
+            runState: record.state,
+            stepType: request.stepType,
+            commandType: request.command.type,
+            resume: Boolean(request.resume),
+          },
+        })
+      );
+    } catch {
+      // The 409 to the caller is the primary signal; the audit bus may be down.
+    }
   }
 
   private async relay(record: RunRecord): Promise<void> {

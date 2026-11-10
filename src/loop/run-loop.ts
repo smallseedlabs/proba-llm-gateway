@@ -576,6 +576,8 @@ async function dispatchTools(
           action: result.ok ? 'tool.executed' : 'tool.failed',
           outcome: result.ok ? 'success' : 'failure',
           occurredAt: deps.clock.isoNow(),
+          errorCode: result.ok ? undefined : result.code,
+          errorMessage: result.ok ? undefined : result.message,
           details: {
             verb: decision.verb.name,
             argsHash,

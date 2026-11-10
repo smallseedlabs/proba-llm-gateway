@@ -44,7 +44,8 @@ export function gatewayAuditEvent(
     category: info?.category ?? 'brain',
     outcome: input.outcome,
     errorCode: input.errorCode,
-    errorMessage: input.errorMessage,
+    // Tool and provider messages are not trusted to be secret-free.
+    errorMessage: input.errorMessage === undefined ? undefined : maskSecretsInText(input.errorMessage).text.slice(0, 1000),
     riskLevel: info?.riskLevel,
     durationMs: input.durationMs,
     occurredAt: input.occurredAt,
