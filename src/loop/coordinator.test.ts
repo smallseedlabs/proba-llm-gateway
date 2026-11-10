@@ -3,7 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { LoopCoordinator } from './coordinator.js';
-import { WorkspaceScopeError } from '../errors.js';
+import { IdempotencyConflictError, WorkspaceScopeError } from '../errors.js';
+import { reverseKeysDeep } from '../testing/reorder.js';
 import { MemoryRunStore } from '../adapters/memory-run-store.js';
 import { FileRunStore } from '../adapters/file-run-store.js';
 import { FailClosedApprovalGate } from '../adapters/fail-closed-approval.js';
@@ -158,6 +159,48 @@ describe('loop coordinator', () => {
     expect(ads.calls[0]?.args).toMatchObject(createArgs);
     expect(ads.calls[0]?.args.providerCampaignId).toBeUndefined();
     expect(llm.completeCalls).toBe(2);
+  });
+
+  it('resumes when the stored request comes back with keys reordered (JSONB round trip)', async () => {
+    const llm = new ScriptedLlmClient([
+      testToolTurn('ads.create_campaign', createArgs),
+      testTurn({ message: { role: 'assistant', content: 'campaign created' } }),
+    ]);
+    const ads = new RecordingAdsDomain();
+    const { coordinator: loop, researchStore, audit } = coordinator({ llm, ads });
+    await seedAcceptedResearch(researchStore);
+    const idempotencyKey = 'abababab-abab-4bab-8bab-abababababab';
+    const req = landingReq({ idempotencyKey });
+    const first = await loop.start(req, testCaller());
+    expect(first.status).toBe('awaiting_approval');
+    const askId = (first.needs?.[0] as { askId: string }).askId;
+
+    const resumed = await loop.start(
+      { ...reverseKeysDeep(req), resume: { askId, choice: 'approve' } },
+      testCaller()
+    );
+    expect(resumed.status).toBe('completed');
+    expect(ads.calls).toHaveLength(1);
+    expect(audit.events.some((e) => e.action === 'command.rejected')).toBe(false);
+  });
+
+  it('audits command.rejected when an idempotency key is reused with a different request', async () => {
+    const llm = new ScriptedLlmClient([testTurn({ message: { role: 'assistant', content: 'hi' } })]);
+    const { coordinator: loop, audit } = coordinator({ llm });
+    const idempotencyKey = 'cdcdcdcd-cdcd-4dcd-8dcd-cdcdcdcdcdcd';
+    await loop.start(testRunRequest({ idempotencyKey }), testCaller());
+    await expect(
+      loop.start(
+        testRunRequest({
+          idempotencyKey,
+          command: { kind: 'command', clientMsgId: 'x', type: 'send_message', payload: { text: 'different' }, sentAt: new Date().toISOString() },
+        }),
+        testCaller()
+      )
+    ).rejects.toBeInstanceOf(IdempotencyConflictError);
+    const rejected = audit.events.find((e) => e.action === 'command.rejected');
+    expect(rejected?.outcome).toBe('denied');
+    expect(rejected?.errorCode).toBe('idempotency_conflict');
   });
 
   it('does not treat resume.values as the executed arguments', async () => {

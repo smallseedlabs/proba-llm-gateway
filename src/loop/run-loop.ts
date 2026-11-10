@@ -149,7 +149,7 @@ export async function runBoundedLoop(
     }
     const iteration = usage.recordIteration();
     record.iteration = iteration;
-    record.messages = record.messages.length === 0 ? initialMessages(packet, request) : refreshSystem(record.messages, packet);
+    record.messages = record.messages.length === 0 ? initialMessages(packet, request) : refreshSystem(record.messages, packet, request);
 
     usage.assertCanCallLlm();
     const turn = await callLlm(deps, record, request, cancellation, usage, offeredToolFilter(preflight.offeredLimbs));
@@ -576,6 +576,8 @@ async function dispatchTools(
           action: result.ok ? 'tool.executed' : 'tool.failed',
           outcome: result.ok ? 'success' : 'failure',
           occurredAt: deps.clock.isoNow(),
+          errorCode: result.ok ? undefined : result.code,
+          errorMessage: result.ok ? undefined : result.message,
           details: {
             verb: decision.verb.name,
             argsHash,

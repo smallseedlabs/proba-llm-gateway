@@ -282,6 +282,7 @@ export async function runApprovedAction(
         outcome: result.ok ? 'success' : 'failure',
         occurredAt: deps.clock.isoNow(),
         errorCode: result.ok ? undefined : result.code,
+        errorMessage: result.ok ? undefined : result.message,
         details: {
           evaluator: 'approved_action',
           proposalId: action.proposalId,
