@@ -3,6 +3,7 @@ import type { LlmMessage } from '../types/llm.js';
 import type { HubRunRequest } from '../types/run.js';
 import { llmToolDefinitions } from '../limbs/catalog.js';
 import { normalizeLandingPageUrl } from '../research/input.js';
+import { FALLBACK_SELF, runBriefText, runBudgetText, type RunBriefFacts, type RunBudgetView } from './brief.js';
 
 const SYSTEM_RULES = [
   'You are the Proba brain inside the gateway harness.',
@@ -14,15 +15,38 @@ const SYSTEM_RULES = [
   'Do not claim a tool succeeded unless a tool result said so.',
 ].join(' ');
 
-export function packetToText(packet: ContextPacket): string {
+/**
+ * `sourceRef.source` of Proba's bootstrap self memory (who Proba is, how it behaves, what its limbs do). The context bridge reads it
+ * from memory-api and serves it, system-trusted, at the head of the policy section.
+ */
+export const SELF_MEMORY_SOURCE = 'proba-self';
+
+type PacketSection = ContextPacket['sections'][number];
+type PacketItem = PacketSection['items'][number];
+
+function isSelfItem(section: PacketSection, item: PacketItem): boolean {
+  return section.kind === 'policy' && item.trust === 'system' && item.sourceRef.source === SELF_MEMORY_SOURCE;
+}
+
+/** The self memory of the packet as text, in packet order; empty when the packet carries none. */
+export function selfMemoryText(packet: ContextPacket): string {
+  return packet.sections
+    .flatMap((section) => section.items.filter((item) => isSelfItem(section, item)))
+    .map((item) => item.text ?? '')
+    .filter((text) => text.length > 0)
+    .join('\n');
+}
+
+export function packetToText(packet: ContextPacket, options: { excludeSelf?: boolean } = {}): string {
   const sections = [...packet.sections].sort((a, b) => a.priority - b.priority);
   return sections
     .map((section) => {
       const items = section.items
+        .filter((item) => !(options.excludeSelf && isSelfItem(section, item)))
         .map((item) => item.text ?? (item.data !== undefined ? JSON.stringify(item.data) : ''))
         .filter((text) => text.length > 0)
         .join('\n');
-      return `[${section.kind}]\n${items}`;
+      return items ? `[${section.kind}]\n${items}` : '';
     })
     .filter((block) => block.trim().length > 0)
     .join('\n\n');
@@ -46,14 +70,39 @@ function operatorInputLine(request: HubRunRequest | undefined): string {
   return url ? `\n\nOperator-supplied landing page URL for this goal (use exactly this for research.gather and ads.create_campaign): ${url}` : '';
 }
 
-function systemText(packet: ContextPacket | undefined, request: HubRunRequest | undefined): string {
-  const contextBlock = packet ? packetToText(packet) : '';
-  const base = `${SYSTEM_RULES}${operatorInputLine(request)}`;
+/**
+ * The byte-stable head of every system message: the self core (or the one-line fallback) and the fixed safety rules. It depends only
+ * on the self memory version, never on the run, the loop or the context, so providers with prefix caching (DeepSeek reports
+ * `prompt_cache_hit_tokens`) reuse it across loops and runs. Nothing per-run may be added before its end.
+ */
+export function systemPrefix(packet: ContextPacket | undefined, withFallback = true): string {
+  const self = packet ? selfMemoryText(packet) : '';
+  const core = self || (withFallback ? FALLBACK_SELF : '');
+  return core ? `[self]\n${core}\n\n${SYSTEM_RULES}` : SYSTEM_RULES;
+}
+
+/**
+ * System text, generated per loop:
+ *   systemPrefix   self core + SYSTEM_RULES (unchanged), byte-stable across loops and runs of the same self version;
+ *   then everything per run: the operator landing URL, the [run] brief (inputs present or missing and where they come from, tools
+ *   on and off) and the rest of the context packet (including relevant self detail entries).
+ * The per-loop budget is not here: it goes in a trailing message (runBudgetMessage) so the conversation before it stays cacheable.
+ * The text informs the model; it does not dictate what to return. Policy code still enforces every limit whatever the text says.
+ */
+function systemText(packet: ContextPacket | undefined, request: HubRunRequest | undefined, brief?: RunBriefFacts): string {
+  const contextBlock = packet ? packetToText(packet, { excludeSelf: true }) : '';
+  const head = `${systemPrefix(packet, brief !== undefined)}${operatorInputLine(request)}`;
+  const base = brief ? `${head}\n\n${runBriefText(request, brief)}` : head;
   return contextBlock ? `${base}\n\nRelevant context:\n${contextBlock}` : base;
 }
 
-export function initialMessages(packet: ContextPacket | undefined, request: HubRunRequest): LlmMessage[] {
-  const system = systemText(packet, request);
+/** The per-loop budget, sent as the last message of each model call (not stored in the run's messages). */
+export function runBudgetMessage(budget: RunBudgetView): LlmMessage {
+  return { role: 'system', content: runBudgetText(budget) };
+}
+
+export function initialMessages(packet: ContextPacket | undefined, request: HubRunRequest, brief?: RunBriefFacts): LlmMessage[] {
+  const system = systemText(packet, request, brief);
   return [
     { role: 'system', content: system },
     { role: 'user', content: commandToUserText(request) },
@@ -63,9 +112,10 @@ export function initialMessages(packet: ContextPacket | undefined, request: HubR
 export function refreshSystem(
   messages: LlmMessage[],
   packet: ContextPacket | undefined,
-  request?: HubRunRequest
+  request?: HubRunRequest,
+  brief?: RunBriefFacts
 ): LlmMessage[] {
-  const system = systemText(packet, request);
+  const system = systemText(packet, request, brief);
   const rest = messages.filter((m) => m.role !== 'system');
   return [{ role: 'system', content: system }, ...rest];
 }

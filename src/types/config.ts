@@ -1,3 +1,4 @@
+import type { Guardrails } from '../guardrails/guardrails.js';
 export const GATEWAY_SERVICE_NAME = 'gateway';
 
 export type RuntimeEnv = 'development' | 'test' | 'production';
@@ -154,6 +155,8 @@ export interface GatewayServiceConfig {
   analytics: AnalyticsConfig;
   actionPolicy: ActionPolicyConfig;
   limits: LimitsConfig;
+  /** Operator guardrails (file + env) that only tighten verbs and limits. Absent = none. */
+  guardrails?: Guardrails;
   audit: AuditConfig;
   runStoreDir: string;
 }

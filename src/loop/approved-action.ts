@@ -19,6 +19,7 @@ import { randomUUID } from 'node:crypto';
 import { canonicalArgsHash } from '../audit/canonical.js';
 import { evaluateActionPolicy } from '../action-policy/evaluate.js';
 import { verbByName } from '../limbs/catalog.js';
+import { NO_GUARDRAILS, verbMode } from '../guardrails/guardrails.js';
 import { applyPreflightToRecord, graphAuditDetails, runPreflight } from '../preflight/engine.js';
 import type { CapabilityNeed } from '../types/preflight.js';
 import type { HubRunRequest, RunSnapshot } from '../types/run.js';
@@ -122,6 +123,9 @@ export async function runApprovedAction(
   }
   const verb = verbByName(action.verb);
   if (!verb) return refuse('verb_not_allowed', `${action.verb} is not in the fixed catalog`);
+  if (verbMode(deps.config.guardrails ?? NO_GUARDRAILS, verb.name) === 'deny') {
+    return refuse('verb_not_allowed', `${verb.name} is turned off by the operator's guardrails`);
+  }
   if (canonicalArgsHash(action.args) !== action.argsHash) {
     return refuse('args_mismatch', 'proposal args do not match the bound argsHash');
   }

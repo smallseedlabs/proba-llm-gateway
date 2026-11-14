@@ -96,6 +96,9 @@ Process: Node 20, Fastify 5, port **3700**. Restart required for env. Production
 | `GATEWAY_MAX_COMPLETION_TOKENS` | completion cap | `null` | no | optional int | run | if set, hard stop |
 | `GATEWAY_MAX_TOTAL_TOKENS` | total tokens | `null` (example comments `8000`) | no | optional int | run + USD bound | required to bound prompt when USD cap set |
 | `GATEWAY_MAX_COST_USD` | USD run ceiling | **`null` (UNSET)** | no | positive number | run | see §3 |
+| `GATEWAY_GUARDRAILS_FILE` | operator guardrails file | `config/guardrails.json` (empty) | no | path | process | tighten-only; looser values refuse start-up (`src/guardrails/guardrails.ts`) |
+| `GATEWAY_VERB_POLICY` | per-verb `allow\|ask\|deny` | unset | no | `verb=mode,...` | process | `deny` hides + refuses the verb; `ask` forces an approval card; never looser than the code or the file |
+| `GATEWAY_GUARDRAIL_MAX_*` | per-run ceilings (ITERATIONS, LLM_CALLS, TOOL_CALLS, PROMPT/COMPLETION/TOTAL_TOKENS, COST_USD) | unset | no | positive | run | min() over deployment limits and the Hub run budget; must be <= file and `GATEWAY_MAX_*` |
 | `GATEWAY_RESPONSE_TOKEN_RESERVE` | completion request + context subtract | `512` (0–128000) | no | int | each turn | |
 | `GATEWAY_MAX_REQUEST_BYTES` | HTTP body | `262144` | no | 1024–2e6 | request | 413 |
 | `GATEWAY_RATE_LIMIT_*` | inbound | 60 / 60000 ms | no | | process | 429 |

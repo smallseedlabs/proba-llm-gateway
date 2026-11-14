@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { ConfigError } from './errors.js';
+import { loadGuardrails } from './guardrails/guardrails.js';
 import {
   ADS_AUDIENCE,
   DEFAULT_CALLER_ISSUERS,
@@ -148,7 +149,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayService
   const host = (env.HOST ?? (nodeEnv === 'production' ? '0.0.0.0' : '127.0.0.1')).trim();
   const port = envInt(env, 'PORT', 3700, 1, 65535);
 
-  return {
+  const config: GatewayServiceConfig = {
     env: nodeEnv,
     logLevel: (env.LOG_LEVEL ?? 'info').trim() || 'info',
     listen: { host, port },
@@ -244,4 +245,5 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayService
     },
     runStoreDir,
   };
+  return { ...config, guardrails: loadGuardrails(env, config.limits) };
 }

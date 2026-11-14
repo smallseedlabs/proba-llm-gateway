@@ -22,6 +22,8 @@ ENV NODE_ENV=production
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY package.json ./
 COPY --from=builder --chown=proba:proba /app/dist ./dist
+# Guardrails default (versioned, tighten-only). Override with GATEWAY_GUARDRAILS_FILE.
+COPY config ./config
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod 755 /app/docker-entrypoint.sh && mkdir -p /app/data/runs && chown -R proba:proba /app/data
 ENV PORT=3700

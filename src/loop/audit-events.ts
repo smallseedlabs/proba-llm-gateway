@@ -125,7 +125,15 @@ export function llmTurnAuditEvents(
       occurredAt,
       spanId,
       durationMs: result.response.latencyMs,
-      details: { ...meta, model: result.response.model, provider: result.response.provider },
+      details: {
+        ...meta,
+        model: result.response.model,
+        provider: result.response.provider,
+        // Prompt tokens the provider served from its prefix cache (DeepSeek prompt_cache_hit_tokens), when it reports them. Named
+        // without "token" so the audit secret masker keeps the number. proba-llm prices every prompt token at
+        // PRICE_PROMPT_USD_PER_MILLION today (no cache-hit rate), so `cost` is an upper bound.
+        ...(result.response.usage.cachedTokens !== undefined ? { promptCacheHits: result.response.usage.cachedTokens } : {}),
+      },
       cost: {
         tokensIn: result.response.usage.promptTokens,
         tokensOut: result.response.usage.completionTokens,
