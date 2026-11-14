@@ -11,9 +11,18 @@ describe('run brief', () => {
   it('says where missing inputs come from instead of letting the model invent them', () => {
     const text = runBriefText(testRunRequest(), none);
     expect(text).toContain('Landing page: none supplied');
-    expect(text).toContain('Campaigns > Reddit post form');
+    expect(text).toContain('creative.draft_post');
     expect(text).toContain('goals.approved_creative');
     expect(text).toContain('Hub analytics review');
+  });
+
+  it('includes platform minimum daily budgets and upfront cap feasibility check when platforms are connected', () => {
+    const text = runBriefText(
+      testRunRequest({ userSuppliedInput: { connectedPlatforms: ['reddit', 'meta'] } }),
+      none
+    );
+    expect(text).toContain('Platform minimum daily budgets: Reddit = £5/day ($5/day); Meta = £1/day ($1/day)');
+    expect(text).toContain("check the goal's daily budget cap from context against these platform minimums");
   });
 
   it('reports present inputs and tools, and leaves the choice of response to the model', () => {
