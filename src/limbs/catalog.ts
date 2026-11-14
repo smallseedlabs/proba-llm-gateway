@@ -43,6 +43,26 @@ export const VERB_CATALOG: readonly VerbDefinition[] = [
   }),
   verb({
     limb: 'research',
+    verb: 'search',
+    name: 'web.search',
+    description:
+      'Search the open web for current ad platform rules, minimum budgets, category context, benchmarks, or audience insights. Read-only; runs without an approval card.',
+    parameters: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['query'],
+      properties: {
+        query: { type: 'string', minLength: 2, maxLength: 300 },
+        maxResults: { type: 'integer', minimum: 1, maximum: 8 },
+      },
+    },
+    risk: 'low',
+    sideEffecting: false,
+    requiresApproval: false,
+    allowlisted: true,
+  }),
+  verb({
+    limb: 'research',
     verb: 'accept',
     name: 'research.accept',
     description:

@@ -148,6 +148,17 @@ export class CatalogPolicyEngine implements PolicyEngine {
         },
       };
     }
+    if (verb.name === 'web.search') {
+      const query = typeof rawArgs.query === 'string' ? rawArgs.query.trim() : '';
+      if (query.length < 2 || query.length > 300) {
+        return { allowed: false, code: 'schema', reason: 'web.search requires a query string between 2 and 300 characters' };
+      }
+      const maxResults =
+        typeof rawArgs.maxResults === 'number' && Number.isInteger(rawArgs.maxResults)
+          ? Math.max(1, Math.min(8, rawArgs.maxResults))
+          : 5;
+      return { allowed: true, verb, args: { query, maxResults } };
+    }
     if (verb.name === 'research.accept') {
       return { allowed: false, code: 'allowlist', reason: 'research.accept is Hub-mediated and is not a model tool' };
     }

@@ -11,6 +11,7 @@ import { attachUserPage } from '../domains/page/local.js';
 import { researchAcceptedNeed } from '../research/artifact.js';
 import { bindingFromCtx, executeGather, lookupCurrentArtifact, type ResearchRuntime } from '../research/gather.js';
 import { normalizeLandingPageUrl } from '../research/input.js';
+import { executeWebSearch } from '../research/web-search.js';
 import type { ResearchArtifact } from '../types/research.js';
 
 export class DomainLimbExecutor implements LimbExecutor {
@@ -56,6 +57,11 @@ export class DomainLimbExecutor implements LimbExecutor {
         ? call.args.lookupUrls.filter((u): u is string => typeof u === 'string')
         : undefined;
       return executeGather(this.research, call, ctx, url, lookupUrls);
+    }
+    if (call.verb.name === 'web.search') {
+      const query = typeof call.args.query === 'string' ? call.args.query : '';
+      const maxResults = typeof call.args.maxResults === 'number' ? call.args.maxResults : 5;
+      return executeWebSearch(query, maxResults);
     }
     if (call.verb.limb === 'ads') {
       if (typeof call.args.providerCampaignId === 'string' || typeof call.args.providerAdId === 'string') {

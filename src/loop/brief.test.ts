@@ -16,13 +16,12 @@ describe('run brief', () => {
     expect(text).toContain('Hub analytics review');
   });
 
-  it('includes platform minimum daily budgets and upfront cap feasibility check when platforms are connected', () => {
+  it('reports connected platforms factually without scripting decisions', () => {
     const text = runBriefText(
       testRunRequest({ userSuppliedInput: { connectedPlatforms: ['reddit', 'meta'] } }),
       none
     );
-    expect(text).toContain('Platform minimum daily budgets: Reddit = £5/day ($5/day); Meta = £1/day ($1/day)');
-    expect(text).toContain("check the goal's daily budget cap from context against these platform minimums");
+    expect(text).toContain('Connected ad platforms in this workspace: reddit, meta.');
   });
 
   it('reports present inputs and tools, and leaves the choice of response to the model', () => {

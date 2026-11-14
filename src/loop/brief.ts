@@ -53,11 +53,7 @@ export function runBriefText(request: HubRunRequest | undefined, facts: RunBrief
     '[run]',
     request ? `Step: ${request.stepType}.` : '',
     connected.length > 0
-      ? `Connected ad platforms in this workspace: ${connected.join(', ')}. Platform minimum daily budgets: Reddit = £5/day ($5/day); Meta = £1/day ($1/day). ` +
-        `BEFORE calling creative.draft_post or ads.create_campaign, check the goal's daily budget cap from context against these platform minimums: ` +
-        `if the cap cannot cover the combined minimums of all connected platforms (e.g. a £5/day cap cannot run both Reddit min £5 + Meta min £1), ` +
-        `DO NOT split below a platform's minimum or draft creatives that cannot launch — immediately explain the shortfall up front and ask the operator whether to (1) raise the goal's daily cap (with exact recommended cap), or (2) focus on a single platform that fits the current cap. ` +
-        `When the cap covers multiple connected platforms, propose plans, creatives, and campaigns across ALL connected platforms (including Meta Facebook/Instagram visual-first creative and Reddit) unless the operator asks for only one platform.`
+      ? `Connected ad platforms in this workspace: ${connected.join(', ')}.`
       : '',
     url
       ? `Landing page: ${url} (operator-supplied).`
