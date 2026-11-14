@@ -14,11 +14,34 @@ const SYSTEM_RULES = [
   'Do not claim a tool succeeded unless a tool result said so.',
 ].join(' ');
 
-export function packetToText(packet: ContextPacket): string {
+/**
+ * `sourceRef.source` of Proba's bootstrap self memory (who Proba is, how it behaves, what its limbs do). The context bridge reads it
+ * from memory-api and serves it, system-trusted, at the head of the policy section.
+ */
+export const SELF_MEMORY_SOURCE = 'proba-self';
+
+type PacketSection = ContextPacket['sections'][number];
+type PacketItem = PacketSection['items'][number];
+
+function isSelfItem(section: PacketSection, item: PacketItem): boolean {
+  return section.kind === 'policy' && item.trust === 'system' && item.sourceRef.source === SELF_MEMORY_SOURCE;
+}
+
+/** The self memory of the packet as text, in packet order; empty when the packet carries none. */
+export function selfMemoryText(packet: ContextPacket): string {
+  return packet.sections
+    .flatMap((section) => section.items.filter((item) => isSelfItem(section, item)))
+    .map((item) => item.text ?? '')
+    .filter((text) => text.length > 0)
+    .join('\n');
+}
+
+export function packetToText(packet: ContextPacket, options: { excludeSelf?: boolean } = {}): string {
   const sections = [...packet.sections].sort((a, b) => a.priority - b.priority);
   return sections
     .map((section) => {
       const items = section.items
+        .filter((item) => !(options.excludeSelf && isSelfItem(section, item)))
         .map((item) => item.text ?? (item.data !== undefined ? JSON.stringify(item.data) : ''))
         .filter((text) => text.length > 0)
         .join('\n');
@@ -46,9 +69,16 @@ function operatorInputLine(request: HubRunRequest | undefined): string {
   return url ? `\n\nOperator-supplied landing page URL for this goal (use exactly this for research.gather and ads.create_campaign): ${url}` : '';
 }
 
+/**
+ * System text: Proba's self memory first (identity, success, right and wrong behaviour, limbs), then the fixed safety rules and the
+ * operator input, then the rest of the context packet. The safety rules are unchanged and always present; policy code still
+ * enforces every limit whatever the text says.
+ */
 function systemText(packet: ContextPacket | undefined, request: HubRunRequest | undefined): string {
-  const contextBlock = packet ? packetToText(packet) : '';
-  const base = `${SYSTEM_RULES}${operatorInputLine(request)}`;
+  const self = packet ? selfMemoryText(packet) : '';
+  const contextBlock = packet ? packetToText(packet, { excludeSelf: true }) : '';
+  const rules = `${SYSTEM_RULES}${operatorInputLine(request)}`;
+  const base = self ? `[self]\n${self}\n\n${rules}` : rules;
   return contextBlock ? `${base}\n\nRelevant context:\n${contextBlock}` : base;
 }
 
