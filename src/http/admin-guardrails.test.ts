@@ -114,6 +114,37 @@ describe('GET/PUT /v1/admin/guardrails', () => {
     }
   });
 
+  it('shows and saves the creative and reviewer blocks (tighten-only)', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'gw-admin-'));
+    const path = join(dir, 'g.json');
+    await writeFile(path, JSON.stringify(seed));
+    const { app, config } = await adminApp({ path });
+    try {
+      const got = (await app.inject({ method: 'GET', url: '/v1/admin/guardrails', headers: { authorization: 'Bearer test' } })).json();
+      expect(got.reviewer).toMatchObject({ locked: { minCheckHours: 1, maxCheckHours: 168, maxAutoChangePct: 20 }, file: null });
+      expect(got.creative.locked.maxHeadlineChars).toBe(300);
+      const put = await app.inject({
+        method: 'PUT',
+        url: '/v1/admin/guardrails',
+        headers: { authorization: 'Bearer test' },
+        payload: { verbs: {}, limits: {}, reviewer: { minCheckHours: 12, maxAutoChangePct: 10 }, creative: { bannedPhrases: ['act now'] } },
+      });
+      expect(put.statusCode).toBe(200);
+      expect(put.json().reviewer.effective).toEqual({ minCheckHours: 12, maxCheckHours: 168, maxAutoChangePct: 10 });
+      expect(config.guardrails?.reviewer).toEqual({ minCheckHours: 12, maxAutoChangePct: 10 });
+      const loose = await app.inject({
+        method: 'PUT',
+        url: '/v1/admin/guardrails',
+        headers: { authorization: 'Bearer test' },
+        payload: { verbs: {}, limits: {}, reviewer: { maxAutoChangePct: 50 } },
+      });
+      expect(loose.statusCode).toBe(400);
+    } finally {
+      await app.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it('rejects a loosening write, leaves the file unchanged, and audits the denial', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'gw-admin-'));
     const path = join(dir, 'g.json');

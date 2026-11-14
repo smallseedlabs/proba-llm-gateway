@@ -16,6 +16,7 @@ import { ConfigError } from '../errors.js';
 import { VERB_CATALOG } from '../limbs/catalog.js';
 import type { LimitsConfig } from '../types/config.js';
 import type { UsageLimits } from '../ports/usage.js';
+import { REVIEW_LOCKS } from '../limbs/review.js';
 import { CREATIVE_LOCKS, LOCKED_BANNED_PHRASES, type CreativeRules } from '../limbs/creative-draft.js';
 
 export const VERB_MODES = ['allow', 'ask', 'deny'] as const;
@@ -54,6 +55,15 @@ export const guardrailsFileSchema = z
       })
       .strict()
       .optional(),
+    /** Campaign reviewer outer bounds: raise the minimum interval, lower the maximum, lower the largest automatic change. */
+    reviewer: z
+      .object({
+        minCheckHours: z.number().positive().optional(),
+        maxCheckHours: z.number().positive().optional(),
+        maxAutoChangePct: z.number().positive().optional(),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 export type GuardrailsFile = z.infer<typeof guardrailsFileSchema>;
@@ -68,6 +78,8 @@ export interface Guardrails {
   limits: Readonly<GuardrailLimits>;
   /** Operator creative tightening (lower caps, extra banned phrases); absent means the code locks only. */
   creative?: Readonly<{ maxHeadlineChars?: number; maxBodyChars?: number; bannedPhrases?: readonly string[] }>;
+  /** Operator reviewer bounds (tighten-only); absent means the code locks only. */
+  reviewer?: Readonly<{ minCheckHours?: number; maxCheckHours?: number; maxAutoChangePct?: number }>;
 }
 
 export const NO_GUARDRAILS: Guardrails = Object.freeze({ version: 'none', source: 'none', verbs: Object.freeze({}), limits: Object.freeze({}) });
@@ -115,6 +127,23 @@ function checkCreative(creative: GuardrailsFile['creative'], origin: string): vo
   }
   if (creative.maxBodyChars !== undefined && creative.maxBodyChars > CREATIVE_LOCKS.maxBodyChars) {
     throw new ConfigError(`${origin}: creative.maxBodyChars=${creative.maxBodyChars} would loosen the code lock (${CREATIVE_LOCKS.maxBodyChars}); guardrails can only tighten`);
+  }
+}
+
+function checkReviewer(reviewer: GuardrailsFile['reviewer'], origin: string): void {
+  if (!reviewer) return;
+  const { minCheckHours, maxCheckHours, maxAutoChangePct } = reviewer;
+  if (minCheckHours !== undefined && minCheckHours < REVIEW_LOCKS.minCheckHours) {
+    throw new ConfigError(`${origin}: reviewer.minCheckHours=${minCheckHours} would loosen the code lock (${REVIEW_LOCKS.minCheckHours}); guardrails can only tighten`);
+  }
+  if (maxCheckHours !== undefined && maxCheckHours > REVIEW_LOCKS.maxCheckHours) {
+    throw new ConfigError(`${origin}: reviewer.maxCheckHours=${maxCheckHours} would loosen the code lock (${REVIEW_LOCKS.maxCheckHours}); guardrails can only tighten`);
+  }
+  if (maxAutoChangePct !== undefined && maxAutoChangePct > REVIEW_LOCKS.maxAutoChangePct) {
+    throw new ConfigError(`${origin}: reviewer.maxAutoChangePct=${maxAutoChangePct} would loosen the code lock (${REVIEW_LOCKS.maxAutoChangePct}); guardrails can only tighten`);
+  }
+  if (minCheckHours !== undefined && maxCheckHours !== undefined && minCheckHours > maxCheckHours) {
+    throw new ConfigError(`${origin}: reviewer.minCheckHours must not exceed reviewer.maxCheckHours`);
   }
 }
 
@@ -205,6 +234,7 @@ export function loadGuardrails(env: NodeJS.ProcessEnv, limits: LimitsConfig, opt
   const fileLimits: GuardrailLimits = file?.limits ?? {};
   checkVerbs(fileVerbs, `guardrails file ${source}`);
   checkCreative(file?.creative, `guardrails file ${source}`);
+  checkReviewer(file?.reviewer, `guardrails file ${source}`);
   checkLimits(fileLimits, (k) => lockedLimit(limits, k), `guardrails file ${source}`, 'the deployment limit GATEWAY_MAX_*');
 
   const envVerbs = parseVerbPolicy(env.GATEWAY_VERB_POLICY);
@@ -240,6 +270,7 @@ export function loadGuardrails(env: NodeJS.ProcessEnv, limits: LimitsConfig, opt
     verbs: Object.freeze(verbs),
     limits: Object.freeze(effective),
     ...(file?.creative ? { creative: Object.freeze({ ...file.creative }) } : {}),
+    ...(file?.reviewer ? { reviewer: Object.freeze({ ...file.reviewer }) } : {}),
   });
 }
 
@@ -273,6 +304,7 @@ export function allowedVerbModes(name: string): VerbMode[] {
 export function assertTightenOnly(file: GuardrailsFile, limits: LimitsConfig, origin: string): void {
   checkVerbs(file.verbs ?? {}, origin);
   checkCreative(file.creative, origin);
+  checkReviewer(file.reviewer, origin);
   checkLimits(file.limits ?? {}, (k) => lockedLimit(limits, k), origin, 'the deployment limit GATEWAY_MAX_*');
 }
 

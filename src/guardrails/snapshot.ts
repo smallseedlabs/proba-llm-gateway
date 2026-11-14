@@ -7,6 +7,8 @@
 import { readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { ConfigError } from '../errors.js';
 import { VERB_CATALOG } from '../limbs/catalog.js';
+import { CREATIVE_LOCKS, LOCKED_BANNED_PHRASES } from '../limbs/creative-draft.js';
+import { effectiveReviewBounds, REVIEW_LOCKS, type ReviewBounds } from '../limbs/review.js';
 import type { LimitsConfig } from '../types/config.js';
 import type { GatewayServiceConfig } from '../types/config.js';
 import {
@@ -49,6 +51,13 @@ export interface GuardrailsSnapshot {
   envLimits: GuardrailLimits;
   effectiveLimits: GuardrailLimits;
   verbs: VerbSnapshot[];
+  /** creative.draft_post checks: code locks, the file's tightening, and the effective rules. */
+  creative: {
+    locked: { maxHeadlineChars: number; maxBodyChars: number; bannedPhrases: readonly string[] };
+    file: GuardrailsFile['creative'] | null;
+  };
+  /** Campaign reviewer outer bounds: code locks, the file's tightening, and the effective bounds. */
+  reviewer: { locked: ReviewBounds; file: GuardrailsFile['reviewer'] | null; effective: ReviewBounds };
 }
 
 function lockedLimits(limits: LimitsConfig): Record<GuardrailLimitKey, number | null> {
@@ -77,6 +86,11 @@ export function toSnapshot(args: {
     fileLimits,
     envLimits: args.envLimits,
     effectiveLimits: { ...args.effective.limits },
+    creative: {
+      locked: { maxHeadlineChars: CREATIVE_LOCKS.maxHeadlineChars, maxBodyChars: CREATIVE_LOCKS.maxBodyChars, bannedPhrases: LOCKED_BANNED_PHRASES },
+      file: args.file?.creative ?? null,
+    },
+    reviewer: { locked: { ...REVIEW_LOCKS }, file: args.file?.reviewer ?? null, effective: effectiveReviewBounds(args.effective.reviewer) },
     verbs: VERB_CATALOG.map((verb) => ({
       name: verb.name,
       locked: lockedVerbMode(verb.name),

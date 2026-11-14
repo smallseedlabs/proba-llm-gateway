@@ -105,3 +105,14 @@ describe('guardrails: tightening is applied', () => {
     expect(applyGuardrailLimits(merged, NO_GUARDRAILS)).toEqual(merged);
   });
 });
+
+describe('guardrails: campaign reviewer bounds', () => {
+  it('accepts tighter bounds and refuses looser ones', () => {
+    const g = load({}, file({ reviewer: { minCheckHours: 6, maxCheckHours: 72, maxAutoChangePct: 10 } }));
+    expect(g.reviewer).toEqual({ minCheckHours: 6, maxCheckHours: 72, maxAutoChangePct: 10 });
+    expect(() => load({}, file({ reviewer: { minCheckHours: 0.5 } }))).toThrow(/reviewer.minCheckHours=0.5 would loosen/);
+    expect(() => load({}, file({ reviewer: { maxCheckHours: 400 } }))).toThrow(/reviewer.maxCheckHours=400 would loosen/);
+    expect(() => load({}, file({ reviewer: { maxAutoChangePct: 50 } }))).toThrow(/reviewer.maxAutoChangePct=50 would loosen/);
+    expect(() => load({}, file({ reviewer: { minCheckHours: 48, maxCheckHours: 24 } }))).toThrow(/must not exceed/);
+  });
+});

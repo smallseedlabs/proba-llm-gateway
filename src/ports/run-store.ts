@@ -1,3 +1,4 @@
+import type { ReviewNote } from '../limbs/review.js';
 /**
  * Durable producer handoff for a gateway run (not the audit DB).
  * Survives Redis outages so a retried Hub Idempotency-Key never re-enters the
@@ -73,6 +74,8 @@ export interface RunRecord {
   lastResume?: ResumeApproval;
   /** review_performance outcome surfaced to Hub (dry-run proposal is evidence only). */
   analytics?: RunAnalyticsSummary;
+  /** Note recorded by the brain reviewer during this run (analytics.review_campaign / report_checkpoint). */
+  reviewNote?: ReviewNote;
   /** Approved analytics action outcome surfaced to Hub. */
   actionOutcome?: RunActionOutcome;
   lastPreflight?: {
@@ -134,6 +137,8 @@ export interface RunAnalyticsSummary {
     args: Record<string, unknown>;
     argsHash: string;
   };
+  /** Present for brain reviews: the brain's note, its clamped next check and any dry-run change. */
+  review?: ReviewNote;
 }
 
 export interface RunActionOutcome {

@@ -316,3 +316,32 @@ Infra (hosting, Redis, ClickHouse) is **out of this formula**.
 - Refusals are non-fatal tool results (`creative_invalid`, `research_not_accepted`) so the model redrafts or explains what is missing.
 - The gateway saves nothing. Hub writes `goals.approved_creative` when the operator approves the card (with optional edits); `ads.create_campaign` then uses that saved copy via `userSuppliedInput.creative`, never the draft arguments.
 - Guardrails file `creative` block (tighten-only): `maxHeadlineChars` (≤ 300), `maxBodyChars` (≤ 10,000), `bannedPhrases` (added to the code list; the code list cannot be removed). Looser values are refused at start-up.
+
+## Campaign reviewer (brain review)
+
+The reviewer is not a separate service or model. Hub starts a `review_performance` run with
+`command.payload.reviewIntent = "brain"`; the gateway runs the normal bounded loop (self memory, context
+packet with the **audited** analytics section, guardrails) but offers the model only two note verbs:
+
+| Verb | Brief name | What it records |
+|------|-----------|-----------------|
+| `analytics.review_campaign` | campaign.optimize | summary, working / not working, keep / change / wait, why now or why not yet, optional change, next check + reason |
+| `analytics.report_checkpoint` | report.checkpoint | day3 / day7 / final: metric, target vs actual, ahead / on_track / behind / unknown, continue / adjust / stop, tweaks |
+
+Nothing executes in a review. A change is only `pause` or `lower_budget`, returned as a dry-run proposal in
+`snapshot.analytics.proposal` (same shape as the deterministic evaluator), so Hub's existing proposal and
+approval flow applies. `snapshot.analytics.review` carries the note; `reviewWindowUntil` = `nextCheckAt`.
+
+Hard values are outer bounds only, tighten-only (code lock → `config/guardrails.json` `reviewer` → Hub request
+`payload.reviewBounds`):
+
+| Bound | Code lock | Effect |
+|-------|-----------|--------|
+| `minCheckHours` | 1 | next check is clamped up to this |
+| `maxCheckHours` | 168 | next check is clamped down to this |
+| `maxAutoChangePct` | 20 | larger decreases are marked `withinAutoLimit: false` (operator approval) |
+
+Other rules: a budget change needs a known current budget (unknown is not zero); increases and new launches
+are not reviewer changes; with no audited metrics in context a checkpoint must report `actual: null` and
+`status: unknown`; `stop` must carry a pause proposal. Invalid notes are refused non-fatally (`review_invalid`)
+so the model can correct itself. Normal runs never see these verbs.
