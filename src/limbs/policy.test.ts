@@ -159,7 +159,11 @@ describe('limb policy and domain executor', () => {
     ).toMatchObject({ allowed: false, code: 'schema' });
     expect(
       policy.evaluate('ads.create_campaign', createArgs, { ...ctx, userSuppliedInput: { landingPageUrl: 'https://example.com/offer' } })
-    ).toMatchObject({ allowed: false, code: 'user_input' });
+    ).toMatchObject({
+      allowed: false,
+      code: 'creative_missing',
+      reason: expect.stringContaining('Save the Reddit post copy for this goal in Campaigns, then approve again'),
+    });
     expect(
       policy.evaluate('ads.create_campaign', createArgs, {
         ...ctx,

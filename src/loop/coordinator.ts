@@ -18,7 +18,7 @@ import {
   ToolRefusedError,
   WorkspaceScopeError,
 } from '../errors.js';
-import { hashedRunKey, legacyRequestFingerprint, requestFingerprint } from '../audit/fingerprint.js';
+import { hashedRunKey, legacyRequestFingerprint, requestFingerprint, resumeScopeFingerprint } from '../audit/fingerprint.js';
 import { validateCommandPayload } from '../protocol.js';
 import type { JWTVerifyGetKey } from 'jose';
 import type { ApprovalGate } from '../ports/approval.js';
@@ -151,10 +151,18 @@ export class LoopCoordinator {
     const fingerprint = requestFingerprint(request);
     let record = await this.deps.runs.get(key);
     if (record) {
+      // An approval resume on an awaiting run may carry operator creative/targeting saved
+      // after the run was created. Only those two operator fields may differ; the landing
+      // URL and every other bound field must still match the stored request.
+      const operatorScopeResume =
+        record.state === 'awaiting_approval' &&
+        !!request.resume &&
+        resumeScopeFingerprint(record.request) === resumeScopeFingerprint(request);
       if (
         record.fingerprint !== fingerprint &&
         record.fingerprint !== legacyRequestFingerprint(request) &&
-        requestFingerprint(record.request) !== fingerprint
+        requestFingerprint(record.request) !== fingerprint &&
+        !operatorScopeResume
       ) {
         await this.auditIdempotencyConflict(request, record);
         throw new IdempotencyConflictError();

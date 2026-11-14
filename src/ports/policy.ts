@@ -15,7 +15,7 @@ export interface PolicyContext {
 
 export type PolicyDecision =
   | { allowed: true; verb: VerbDefinition; args: Record<string, unknown> }
-  | { allowed: false; code: 'schema' | 'allowlist' | 'permission' | 'unknown_verb' | 'user_input'; reason: string };
+  | { allowed: false; code: 'schema' | 'allowlist' | 'permission' | 'unknown_verb' | 'user_input' | 'creative_missing'; reason: string };
 
 export interface PolicyEngine {
   evaluate(toolName: string, rawArgs: unknown, ctx: PolicyContext): PolicyDecision;

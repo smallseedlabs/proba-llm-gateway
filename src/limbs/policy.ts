@@ -97,9 +97,8 @@ export class CatalogPolicyEngine implements PolicyEngine {
       if (!creative) {
         return {
           allowed: false,
-          code: 'user_input',
-          reason:
-            'ads.create_campaign requires operator-approved creative (userSuppliedInput.creative) so Ads can create the post; the model cannot author ad copy or media',
+          code: 'creative_missing',
+          reason: CREATIVE_MISSING_REASON,
         };
       }
       const imageUrl = typeof creative.mediaUrl === 'string' ? normalizeLandingPageUrl(creative.mediaUrl) : undefined;
@@ -124,3 +123,11 @@ export class CatalogPolicyEngine implements PolicyEngine {
     return { allowed: true, verb, args: rawArgs };
   }
 }
+
+/**
+ * Actionable reason for a create without operator copy. The check is unchanged (no
+ * creative, no campaign); the run is told what the operator must do so it can say so
+ * and finish, instead of failing the run.
+ */
+export const CREATIVE_MISSING_REASON =
+  'ads.create_campaign needs operator-approved post copy and none is saved for this goal. Save the Reddit post copy for this goal in Campaigns, then approve again. The model cannot author ad copy or media.';
