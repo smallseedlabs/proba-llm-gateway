@@ -159,3 +159,37 @@ export function parseImageExcerpt(excerpt: string | undefined): { width?: number
   if (!m) return {};
   return { width: Number(m[1]), height: Number(m[2]) };
 }
+
+export const VIDEO_CANDIDATE_KINDS = ['og:video', 'video'] as const;
+export type VideoCandidateKind = (typeof VIDEO_CANDIDATE_KINDS)[number];
+
+export interface VideoCandidate {
+  kind: VideoCandidateKind;
+  url: string;
+}
+
+/**
+ * Prefer og:video / og:video:secure_url, then <video src> / <source src> on the landing site.
+ */
+export function extractVideoCandidates(html: string, landingPageUrl: string): VideoCandidate[] {
+  const out: VideoCandidate[] = [];
+  const seen = new Set<string>();
+  const add = (kind: VideoCandidateKind, raw: string | undefined) => {
+    const url = raw ? resolvePageUrl(raw, landingPageUrl) : undefined;
+    if (!url || seen.has(url) || !isOwnSiteUrl(url, landingPageUrl)) return;
+    seen.add(url);
+    out.push({ kind, url });
+  };
+  add('og:video', metaContent(html, ['og:video:secure_url', 'og:video:url', 'og:video']));
+  for (const tag of tags(html, 'video')) {
+    add('video', attr(tag, 'src'));
+  }
+  for (const tag of tags(html, 'source')) {
+    const type = (attr(tag, 'type') ?? '').toLowerCase();
+    const src = attr(tag, 'src');
+    if (type.startsWith('video/') || (src && /\.(mp4|mov|webm)(\?|$)/i.test(src))) {
+      add('video', src);
+    }
+  }
+  return out;
+}

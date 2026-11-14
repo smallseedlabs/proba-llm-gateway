@@ -197,6 +197,7 @@ export async function finishBrainReview(
         decisionId,
         kind: note?.kind ?? 'none',
         decision: note?.decision ?? 'none',
+        summary: note?.summary,
         nextCheckAt: note?.nextCheckAt,
         clamped: note?.clamped ?? false,
         grantsSpend: false,

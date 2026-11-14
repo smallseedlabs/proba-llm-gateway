@@ -118,10 +118,11 @@ describe('plan card sections (targeting + defaults)', () => {
     });
   });
 
-  it('refuses t5_ ids, unknown keys, non-reddit platforms and over-long schedules', () => {
+  it('accepts meta alongside reddit and refuses t5_ ids, unknown keys, unsupported platforms and over-long schedules', () => {
     expect(checkCreativeDraft({ ...ok, targeting: { communities: ['t5_abc'] } }, base).ok).toBe(false);
     expect(checkCreativeDraft({ ...ok, targeting: { bid: 5 } }, base).ok).toBe(false);
-    expect(checkCreativeDraft({ ...ok, plan: { successMetric: 'clicks', platform: 'meta' } }, base).ok).toBe(false);
+    expect(checkCreativeDraft({ ...ok, plan: { successMetric: 'clicks', platform: 'meta' } }, base).ok).toBe(true);
+    expect(checkCreativeDraft({ ...ok, plan: { successMetric: 'clicks', platform: 'tiktok' } }, base).ok).toBe(false);
     expect(checkCreativeDraft({ ...ok, plan: { successMetric: 'clicks', durationDays: 365 } }, base).ok).toBe(false);
     expect(checkCreativeDraft({ ...ok, plan: { successMetric: 'vibes' } }, base).ok).toBe(false);
     expect(checkCreativeDraft({ ...ok, targeting: { communities: Array.from({ length: 26 }, (_, i) => `sub${i}x`) } }, base).ok).toBe(false);

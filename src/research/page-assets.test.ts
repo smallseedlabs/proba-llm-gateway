@@ -3,6 +3,7 @@ import {
   brandFindingText,
   extractBrandNames,
   extractImageCandidates,
+  extractVideoCandidates,
   isOwnSiteUrl,
   parseBrandNameFromFinding,
   resolvePageUrl,
@@ -53,5 +54,17 @@ describe('page asset extraction', () => {
 
   it('round-trips the brand finding text', () => {
     expect(parseBrandNameFromFinding(brandFindingText('Small Seed Labs'))).toBe('Small Seed Labs');
+  });
+
+  it('extracts own-site video candidates from og:video and video/source tags', () => {
+    const html = `
+      <meta property="og:video:secure_url" content="https://cdn.example.com/promo.mp4" />
+      <video src="/hero-loop.mp4"></video>
+      <source src="https://other.example/ad.mp4" type="video/mp4" />
+    `;
+    expect(extractVideoCandidates(html, page)).toEqual([
+      { kind: 'og:video', url: 'https://cdn.example.com/promo.mp4' },
+      { kind: 'video', url: 'https://example.com/hero-loop.mp4' },
+    ]);
   });
 });

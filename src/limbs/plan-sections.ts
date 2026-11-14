@@ -28,8 +28,11 @@ export interface CheckedTargeting {
   languages?: string[];
 }
 
+export const SUPPORTED_PLAN_PLATFORMS = ['reddit', 'meta'] as const;
+export type SupportedPlanPlatform = (typeof SUPPORTED_PLAN_PLATFORMS)[number];
+
 export interface CheckedPlan {
-  platform: 'reddit';
+  platform: SupportedPlanPlatform;
   successMetric: SuccessMetric;
   /** Target value of the success metric over the run (e.g. 200 clicks, 1.2 ctr %). */
   successTarget?: number;
@@ -87,7 +90,10 @@ export function checkPlan(raw: unknown, rules: PlanRules = DEFAULT_PLAN_RULES): 
   const allowed = new Set(['platform', 'successMetric', 'successTarget', 'durationDays', 'reasons']);
   for (const k of Object.keys(raw)) if (!allowed.has(k)) return { ok: false, reason: `plan.${k} is not supported` };
   const platform = raw.platform ?? 'reddit';
-  if (platform !== 'reddit') return { ok: false, reason: 'plan.platform must be reddit (the only connected ad platform)' };
+  if (typeof platform !== 'string' || !(SUPPORTED_PLAN_PLATFORMS as readonly string[]).includes(platform)) {
+    return { ok: false, reason: `plan.platform must be one of ${SUPPORTED_PLAN_PLATFORMS.join(', ')}` };
+  }
+  const typedPlatform = platform as SupportedPlanPlatform;
   if (typeof raw.successMetric !== 'string' || !(SUCCESS_METRICS as readonly string[]).includes(raw.successMetric)) {
     return { ok: false, reason: `plan.successMetric must be one of ${SUCCESS_METRICS.join(', ')}` };
   }
@@ -111,5 +117,5 @@ export function checkPlan(raw: unknown, rules: PlanRules = DEFAULT_PLAN_RULES): 
       if (typeof v === 'string' && v.trim()) reasons[k.slice(0, 40)] = v.trim().slice(0, 300);
     }
   }
-  return { ok: true, plan: { platform: 'reddit', successMetric: raw.successMetric as SuccessMetric, ...(successTarget ? { successTarget } : {}), ...(durationDays ? { durationDays } : {}), reasons } };
+  return { ok: true, plan: { platform: typedPlatform, successMetric: raw.successMetric as SuccessMetric, ...(successTarget ? { successTarget } : {}), ...(durationDays ? { durationDays } : {}), reasons } };
 }
