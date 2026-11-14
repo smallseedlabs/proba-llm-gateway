@@ -227,3 +227,28 @@ export function applyGuardrailLimits(limits: UsageLimits, guardrails: Guardrails
   }
   return out;
 }
+
+/** Modes at least as strict as the code lock: the only values a file may set for this verb. */
+export function allowedVerbModes(name: string): VerbMode[] {
+  const locked = lockedVerbMode(name);
+  return VERB_MODES.filter((mode) => STRICTNESS[mode] >= STRICTNESS[locked]);
+}
+
+/** Refuse a candidate file that would loosen the code locks or the deployment GATEWAY_MAX_* limits. */
+export function assertTightenOnly(file: GuardrailsFile, limits: LimitsConfig, origin: string): void {
+  checkVerbs(file.verbs ?? {}, origin);
+  checkLimits(file.limits ?? {}, (k) => lockedLimit(limits, k), origin, 'the deployment limit GATEWAY_MAX_*');
+}
+
+export function readEnvVerbPolicy(env: NodeJS.ProcessEnv): Record<string, VerbMode> {
+  return parseVerbPolicy(env.GATEWAY_VERB_POLICY);
+}
+
+export function readEnvGuardrailLimits(env: NodeJS.ProcessEnv): GuardrailLimits {
+  return envLimits(env);
+}
+
+/** Deployment GATEWAY_MAX_* ceiling for a key; `null` means unbounded. */
+export function deploymentLimit(limits: LimitsConfig, key: GuardrailLimitKey): number | null {
+  return lockedLimit(limits, key);
+}
