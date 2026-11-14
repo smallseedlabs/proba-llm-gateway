@@ -206,6 +206,26 @@ export const VERB_CATALOG: readonly VerbDefinition[] = [
           type: 'number',
           description: 'Optional bid cap or cost cap in campaign currency when using a capped bidStrategy.',
         },
+        objective: {
+          type: 'string',
+          enum: ['OUTCOME_TRAFFIC', 'OUTCOME_AWARENESS', 'OUTCOME_ENGAGEMENT', 'OUTCOME_LEADS', 'OUTCOME_SALES'],
+          description: 'Campaign objective chosen for the goal (e.g. OUTCOME_TRAFFIC or OUTCOME_AWARENESS).',
+        },
+        optimizationGoal: {
+          type: 'string',
+          enum: ['LINK_CLICKS', 'LANDING_PAGE_VIEWS', 'IMPRESSIONS', 'REACH', 'OFFSITE_CONVERSIONS'],
+          description: 'Delivery optimization goal matching the goal and tracking readiness.',
+        },
+        billingEvent: {
+          type: 'string',
+          enum: ['IMPRESSIONS', 'LINK_CLICKS'],
+          description: 'Billing event for ad set delivery (e.g. IMPRESSIONS).',
+        },
+        ctaType: {
+          type: 'string',
+          enum: ['LEARN_MORE', 'SIGN_UP', 'SHOP_NOW', 'GET_QUOTE', 'DOWNLOAD'],
+          description: 'Call-to-action button matching what the landing page offers.',
+        },
       },
     },
     risk: 'high',
