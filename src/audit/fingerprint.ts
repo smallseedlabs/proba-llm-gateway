@@ -54,6 +54,19 @@ export function legacyRequestFingerprint(request: HubRunRequest): string {
   return createHash('sha256').update(JSON.stringify(fingerprintBody(request))).digest('hex');
 }
 
+/**
+ * Fingerprint with operator-approved creative/targeting removed from userSuppliedInput.
+ * Used only to bind an approval resume on an awaiting run: the operator may save or
+ * change post copy (Hub PUT /v1/goals/:id/creative) after the run was created. Every
+ * other field, including the landing URL (the research input revision), still binds.
+ */
+export function resumeScopeFingerprint(request: HubRunRequest): string {
+  const body = fingerprintBody(request);
+  const input = request.userSuppliedInput;
+  const scoped = input ? { landingPageUrl: input.landingPageUrl } : null;
+  return createHash('sha256').update(canonicalJson({ ...body, userSuppliedInput: scoped })).digest('hex');
+}
+
 export function hashedRunKey(issuer: string, subject: string, idempotencyKey: string): string {
   return createHash('sha256').update(`${issuer}\n${subject}\n${idempotencyKey}`).digest('hex');
 }
