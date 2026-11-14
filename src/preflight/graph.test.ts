@@ -119,6 +119,9 @@ describe('prerequisite graph', () => {
     expect(spendClassForVerb('ads.create_campaign')).toBe('spend_increase');
     expect(spendClassForVerb('ads.update_campaign', { dailyBudget: 25 })).toBe('spend_increase');
     expect(spendClassForVerb('ads.update_campaign', { name: 'n' })).toBe('none');
+    expect(spendClassForVerb('create_campaign')).toBe('spend_increase');
+    expect(spendClassForVerb('creative.draft_post')).toBe('none');
+    expect(spendClassForVerb('analytics.review_campaign')).toBe('none');
     expect(PREREQUISITE_NODES['run.budget'].kind).toBe('local');
   });
 });

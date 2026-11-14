@@ -49,15 +49,17 @@ function loop(input: {
   const researchStore = input.researchStore ?? new MemoryResearchStore('test');
   const research = input.research ?? new SourcedResearchProvider();
   const clock = new SystemClock();
+  const runs = new MemoryRunStore('test');
   return {
     ads,
     research,
     researchStore,
+    runs,
     coordinator: new LoopCoordinator({
       config: testConfig(),
       clock,
       audit: new MemoryAuditPublisher(),
-      runs: new MemoryRunStore('test'),
+      runs,
       llm: input.llm,
       context: new ScriptedContextPort(),
       policy: new CatalogPolicyEngine(),
@@ -81,13 +83,17 @@ describe('research review artifact', () => {
       testTurn({ message: { role: 'assistant', content: 'created' } }),
     ]);
     const ads = new RecordingAdsDomain();
-    const { coordinator, researchStore } = loop({ llm, ads, research });
+    const { coordinator, researchStore, runs } = loop({ llm, ads, research });
     const key = 'aaaaaaaa-aaaa-4aaa-8a01-aaaaaaaaaaaa';
     const first = await coordinator.start(landingReq({ idempotencyKey: key }), testCaller());
     expect(first.status).toBe('awaiting_approval');
     expect((first.needs?.[0] as { verb?: string }).verb).toBe('research.accept');
     expect(ads.calls).toHaveLength(0);
     expect(research.calls).toBe(1);
+    const gathered = await runs.getByRunId(first.runId);
+    const gatherTurn = gathered?.toolTurns.find((t) => t.verbName === 'research.gather');
+    expect(gatherTurn?.state).toBe('completed');
+    expect(gatherTurn?.result).toMatchObject({ ok: true });
     const stored = await researchStore.get(testBinding(), inputRevisionForUrl(TEST_LANDING_URL));
     expect(stored?.status).toBe('awaiting_acceptance');
     expect(stored?.findings[0]?.sourceIds.length).toBeGreaterThan(0);
