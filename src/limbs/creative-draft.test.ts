@@ -69,3 +69,32 @@ describe('creative guardrails are tighten-only', () => {
     ).toThrow(/loosen/);
   });
 });
+
+describe('plan card sections (targeting + defaults)', () => {
+  it('accepts targeting and plan defaults with reasons and normalises names', () => {
+    const r = checkCreativeDraft(
+      {
+        ...ok,
+        targeting: { communities: ['r/UKhiking', 'hiking'], geolocations: ['gb'], languages: ['en'] },
+        plan: { successMetric: 'clicks', successTarget: 200, durationDays: 14, reasons: { successMetric: 'chose clicks because the page has no signup form' } },
+      },
+      base
+    );
+    expect(r).toMatchObject({
+      ok: true,
+      draft: {
+        targeting: { communities: ['UKhiking', 'hiking'], geolocations: ['GB'], languages: ['EN'] },
+        plan: { platform: 'reddit', successMetric: 'clicks', successTarget: 200, durationDays: 14 },
+      },
+    });
+  });
+
+  it('refuses t5_ ids, unknown keys, non-reddit platforms and over-long schedules', () => {
+    expect(checkCreativeDraft({ ...ok, targeting: { communities: ['t5_abc'] } }, base).ok).toBe(false);
+    expect(checkCreativeDraft({ ...ok, targeting: { bid: 5 } }, base).ok).toBe(false);
+    expect(checkCreativeDraft({ ...ok, plan: { successMetric: 'clicks', platform: 'meta' } }, base).ok).toBe(false);
+    expect(checkCreativeDraft({ ...ok, plan: { successMetric: 'clicks', durationDays: 365 } }, base).ok).toBe(false);
+    expect(checkCreativeDraft({ ...ok, plan: { successMetric: 'vibes' } }, base).ok).toBe(false);
+    expect(checkCreativeDraft({ ...ok, targeting: { communities: Array.from({ length: 26 }, (_, i) => `sub${i}x`) } }, base).ok).toBe(false);
+  });
+});

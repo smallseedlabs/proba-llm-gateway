@@ -10,6 +10,7 @@
  */
 
 import { normalizeLandingPageUrl } from '../research/input.js';
+import { checkPlan, checkTargeting, type CheckedPlan, type CheckedTargeting, type PlanRules } from './plan-sections.js';
 
 /** Code locks. Reddit headline max is 300; body is locked well under Reddit's 40k so drafts stay ad-sized. */
 export const CREATIVE_LOCKS = Object.freeze({ maxHeadlineChars: 300, maxBodyChars: 10_000, maxClaims: 10 });
@@ -61,6 +62,10 @@ export interface CheckedDraft {
   rationale?: string;
   researchArtifactId: string;
   researchVersion: number;
+  /** Proposed targeting; saved as goals.approved_targeting when the operator approves the plan card. */
+  targeting?: CheckedTargeting;
+  /** Success metric, platform and duration, each with the reason it was chosen. */
+  plan?: CheckedPlan;
 }
 
 export type DraftCheck =
@@ -72,6 +77,7 @@ export interface DraftCheckInput {
   /** Accepted research for this goal/thread and landing URL; undefined when none is accepted. */
   research?: { artifactId: string; version: number; findingIds: readonly string[] };
   rules?: CreativeRules;
+  planRules?: PlanRules;
 }
 
 function escapeRe(text: string): string {
@@ -200,6 +206,10 @@ export function checkCreativeDraft(raw: Record<string, unknown>, input: DraftChe
         'the copy makes factual claims (numbers, prices, superlatives) without citing accepted research findings; add claims[{text, findingId}] or remove the claim',
     };
   }
+  const targeting = checkTargeting(raw.targeting, input.planRules);
+  if (!targeting.ok) return { ok: false, code: 'creative_invalid', reason: targeting.reason };
+  const plan = checkPlan(raw.plan, input.planRules);
+  if (!plan.ok) return { ok: false, code: 'creative_invalid', reason: plan.reason };
   const rationale = typeof raw.rationale === 'string' && raw.rationale.trim() ? raw.rationale.trim().slice(0, 1000) : undefined;
   return {
     ok: true,
@@ -212,6 +222,8 @@ export function checkCreativeDraft(raw: Record<string, unknown>, input: DraftChe
       ...(rationale ? { rationale } : {}),
       researchArtifactId: input.research.artifactId,
       researchVersion: input.research.version,
+      ...(targeting.targeting ? { targeting: targeting.targeting } : {}),
+      ...(plan.plan ? { plan: plan.plan } : {}),
     },
   };
 }
