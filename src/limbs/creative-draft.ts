@@ -263,7 +263,7 @@ export function checkCreativeDraft(raw: Record<string, unknown>, input: DraftChe
   const ctaType = typeof raw.ctaType === 'string' && ALLOWED_CTA.has(raw.ctaType)
     ? (raw.ctaType as CheckedDraft['ctaType'])
     : undefined;
-  const visualBrief = typeof raw.visualBrief === 'string' && raw.visualBrief.trim() ? raw.visualBrief.trim().slice(0, 500) : undefined;
+  const visualBrief = typeof raw.visualBrief === 'string' && raw.visualBrief.trim() ? raw.visualBrief.trim().slice(0, 2000) : undefined;
   return {
     ok: true,
     draft: {

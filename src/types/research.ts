@@ -83,7 +83,7 @@ export const approvedCreativeSchema = z.union([
       imageUrl: z.string().min(1).max(2048).optional(),
       videoUrl: z.string().min(1).max(2048).optional(),
       ctaType: z.string().min(1).max(64).optional(),
-      visualBrief: z.string().min(1).max(500).optional(),
+      visualBrief: z.string().min(1).max(2000).optional(),
     })
     .strict(),
   z
@@ -95,7 +95,7 @@ export const approvedCreativeSchema = z.union([
       callToAction: z.string().min(1).max(64).optional(),
       videoUrl: z.string().min(1).max(2048).optional(),
       ctaType: z.string().min(1).max(64).optional(),
-      visualBrief: z.string().min(1).max(500).optional(),
+      visualBrief: z.string().min(1).max(2000).optional(),
     })
     .strict(),
 ]);

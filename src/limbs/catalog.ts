@@ -160,8 +160,8 @@ export const VERB_CATALOG: readonly VerbDefinition[] = [
         },
         visualBrief: {
           type: 'string',
-          maxLength: 500,
-          description: 'Short creative art-direction note describing the visual composition or hero image/video angle.',
+          maxLength: 2000,
+          description: 'Creative art-direction note (<= 2000 chars) describing the visual composition or hero image/video angle.',
         },
         targeting: {
           type: 'object',
