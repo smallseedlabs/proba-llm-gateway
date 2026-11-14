@@ -196,6 +196,16 @@ export const VERB_CATALOG: readonly VerbDefinition[] = [
         dailyBudget: { type: 'number' },
         currency: { type: 'string', minLength: 3, maxLength: 3 },
         platform: { type: 'string', enum: ['reddit', 'microsoft', 'google', 'meta'] },
+        bidStrategy: {
+          type: 'string',
+          enum: ['LOWEST_COST_WITHOUT_CAP', 'LOWEST_COST_WITH_BID_CAP', 'COST_CAP'],
+          description:
+            'Bidding strategy chosen for this campaign (e.g. LOWEST_COST_WITHOUT_CAP for open learning/delivery, or LOWEST_COST_WITH_BID_CAP / COST_CAP paired with bidAmount).',
+        },
+        bidAmount: {
+          type: 'number',
+          description: 'Optional bid cap or cost cap in campaign currency when using a capped bidStrategy.',
+        },
       },
     },
     risk: 'high',
