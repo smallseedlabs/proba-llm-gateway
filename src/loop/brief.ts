@@ -50,6 +50,8 @@ export function runBriefText(request: HubRunRequest | undefined, facts: RunBrief
       ? `Landing page: ${url} (operator-supplied).`
       : 'Landing page: none supplied. The operator sets it on the goal; research.gather and ads.create_campaign need it.',
     creativeLine(request),
+    'Defaults: do not ask the operator for success metric, platform, targeting or duration. Choose them yourself from the goal, page and research ' +
+      'and put them in the creative.draft_post plan card (plan + targeting, each with a "chose X because Y" reason); the operator can override any of it.',
     'Metrics: come from the Hub analytics review (the analytics section of your context), not from a tool you call.',
     facts.offeredTools.length > 0
       ? `Tools you can call now: ${facts.offeredTools.join(', ')}. ${

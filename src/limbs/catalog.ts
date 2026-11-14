@@ -93,7 +93,7 @@ export const VERB_CATALOG: readonly VerbDefinition[] = [
     verb: 'draft_post',
     name: 'creative.draft_post',
     description:
-      'Draft the Reddit TEXT post (headline + body) for this goal from the goal, the operator page and the ACCEPTED research. The operator sees it as an approval card and may edit it; only their approval saves it as the goal creative, after which ads.create_campaign can run. Use this when no creative is saved yet. Write for Reddit: plain, specific, no hype. Any factual claim (numbers, prices, superlatives) must be listed in claims with the accepted research findingId it comes from. Never include URLs other than the operator landing page; never invent a landing page.',
+      'Propose the campaign plan in ONE card: the Reddit TEXT post (headline + body) plus optional targeting and plan defaults (success metric, platform, duration) for this goal from the goal, the operator page and the ACCEPTED research. The operator sees it as an approval card and may edit it; only their approval saves it as the goal creative, after which ads.create_campaign can run. Use this when no creative is saved yet. Write for Reddit: plain, specific, no hype. Any factual claim (numbers, prices, superlatives) must be listed in claims with the accepted research findingId it comes from. Never include URLs other than the operator landing page; never invent a landing page.',
     parameters: {
       type: 'object',
       additionalProperties: false,
@@ -113,6 +113,16 @@ export const VERB_CATALOG: readonly VerbDefinition[] = [
           },
         },
         landingPageUrl: { type: 'string', minLength: 1, maxLength: 2048 },
+        targeting: {
+          type: 'object',
+          description:
+            'Your proposed Reddit targeting: communities (subreddit names, no r/ or t5_), geolocations (country codes like GB, US), interests, keywords, platforms, languages. Choose from the goal, page and research; explain each in plan.reasons.',
+        },
+        plan: {
+          type: 'object',
+          description:
+            'Defaults you chose so the operator does not have to: platform (reddit), successMetric (clicks|ctr|cpc|landing_page_views|signups|conversions), successTarget (number over the run), durationDays, reasons {field: "chose X because Y"}.',
+        },
       },
     },
     risk: 'medium',
