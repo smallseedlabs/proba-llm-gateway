@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BudgetExhaustedError } from '../errors.js';
-import { contextBudgetForIteration, conservativeNextCallCostUsd, observedSpendUsd, RunUsageLedger } from './reservations.js';
+import { contextBudgetForIteration, conservativeNextCallCostUsd, DEFAULT_COMPLETION_TOKEN_CAP, observedSpendUsd, RunUsageLedger } from './reservations.js';
 import type { TurnResponse } from '../types/llm.js';
 import type { UsageLimits } from '../ports/usage.js';
 import type { LlmPricingClaim } from '../types/preflight.js';
@@ -177,4 +177,18 @@ describe('usage reservations', () => {
       expect(withHit.amount).toBe(withoutHit.amount);
     }
   });
+
+  it('uses the remaining run completion budget, not the context response reserve, as the per-call cap', () => {
+    const ledger = new RunUsageLedger(limits({ maxCompletionTokens: 1500, responseTokenReserve: 512 }));
+    expect(ledger.completionTokenCap()).toBe(1500);
+    ledger.recordLlmTurn(turn({ estimate: 0.001, currency: 'USD', pricingVersion: 'test-v1' }, 100, 68));
+    expect(ledger.completionTokenCap()).toBe(1432);
+  });
+
+  it('defaults a missing run completion cap to 4000 so a 512 reserve cannot clip a draft', () => {
+    const ledger = new RunUsageLedger(limits({ maxCompletionTokens: null, responseTokenReserve: 512 }));
+    expect(DEFAULT_COMPLETION_TOKEN_CAP).toBe(4000);
+    expect(ledger.completionTokenCap()).toBe(4000);
+  });
+
 });
