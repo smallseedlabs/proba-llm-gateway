@@ -27,6 +27,13 @@ export const VERB_CATALOG: readonly VerbDefinition[] = [
       additionalProperties: false,
       properties: {
         url: { type: 'string', minLength: 1, maxLength: 2048 },
+        lookupUrls: {
+          type: 'array',
+          maxItems: 3,
+          items: { type: 'string', minLength: 1, maxLength: 2048 },
+          description:
+            'Optional public https URLs (up to 3) to fetch for category or Reddit ad-practice research. Each becomes a lookup-* source.',
+        },
       },
     },
     risk: 'medium',
@@ -113,6 +120,13 @@ export const VERB_CATALOG: readonly VerbDefinition[] = [
           },
         },
         landingPageUrl: { type: 'string', minLength: 1, maxLength: 2048 },
+        imageUrl: {
+          type: 'string',
+          minLength: 1,
+          maxLength: 2048,
+          description:
+            'Optional validated image URL from an accepted img-* research source on the operator landing page. When omitted and an accepted img-* source exists, the first validated landing-page image is attached automatically.',
+        },
         targeting: {
           type: 'object',
           description:

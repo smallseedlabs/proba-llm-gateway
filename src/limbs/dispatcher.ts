@@ -52,7 +52,10 @@ export class DomainLimbExecutor implements LimbExecutor {
       if (!url) {
         return { ok: false, code: 'user_input', message: 'research.gather requires the user-supplied landing page URL' };
       }
-      return executeGather(this.research, call, ctx, url);
+      const lookupUrls = Array.isArray(call.args.lookupUrls)
+        ? call.args.lookupUrls.filter((u): u is string => typeof u === 'string')
+        : undefined;
+      return executeGather(this.research, call, ctx, url, lookupUrls);
     }
     if (call.verb.limb === 'ads') {
       if (typeof call.args.providerCampaignId === 'string' || typeof call.args.providerAdId === 'string') {

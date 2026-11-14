@@ -13,7 +13,13 @@ export interface PolicyContext {
   threadId?: string;
   userSuppliedInput?: { landingPageUrl: string; creative?: Record<string, unknown>; targeting?: Record<string, unknown> };
   /** Accepted research for this goal and landing URL (creative.draft_post claims must cite its findings). */
-  acceptedResearch?: { artifactId: string; version: number; findingIds: readonly string[] };
+  acceptedResearch?: {
+    artifactId: string;
+    version: number;
+    findingIds: readonly string[];
+    brandNames?: readonly string[];
+    imageUrls?: readonly string[];
+  };
   /** Effective creative rules after operator guardrails (tighten-only). */
   creativeRules?: CreativeRules;
 }
