@@ -19,6 +19,7 @@ import { verbByName } from '../limbs/catalog.js';
 import { applyResearchResume, isResearchAcceptPending } from '../research/acceptance.js';
 import { lookupCurrentArtifact } from '../research/gather.js';
 import { readUserSuppliedLanding } from '../research/input.js';
+import { isPageImageSourceId, parseBrandNameFromFinding } from '../research/page-assets.js';
 import type { ResearchArtifact } from '../types/research.js';
 import {
   applyPreflightToRecord,
@@ -726,7 +727,7 @@ async function dispatchTools(
 async function acceptedResearchFor(
   deps: Pick<LoopBodyDeps, 'researchStore'>,
   request: HubRunRequest
-): Promise<{ artifactId: string; version: number; findingIds: string[] } | undefined> {
+): Promise<{ artifactId: string; version: number; findingIds: string[]; brandNames?: string[]; imageUrls?: string[] } | undefined> {
   const landingPageUrl = readUserSuppliedLanding(request.userSuppliedInput);
   if (!landingPageUrl || !request.goalId || !request.threadId) return undefined;
   const artifact = await lookupCurrentArtifact(
@@ -735,7 +736,19 @@ async function acceptedResearchFor(
     landingPageUrl
   );
   if (!artifact || artifact.status !== 'accepted' || !artifact.acceptedAt || artifact.landingPageUrl !== landingPageUrl) return undefined;
-  return { artifactId: artifact.artifactId, version: artifact.version, findingIds: artifact.findings.map((f) => f.id) };
+  const brandNames = artifact.findings
+    .map((f) => parseBrandNameFromFinding(f.text))
+    .filter((b): b is string => Boolean(b));
+  const imageUrls = artifact.sources
+    .filter((s) => isPageImageSourceId(s.sourceId))
+    .map((s) => s.url);
+  return {
+    artifactId: artifact.artifactId,
+    version: artifact.version,
+    findingIds: artifact.findings.map((f) => f.id),
+    ...(brandNames.length > 0 ? { brandNames } : {}),
+    ...(imageUrls.length > 0 ? { imageUrls } : {}),
+  };
 }
 
 const TRUNCATED_COMPLETION_NUDGE: LlmMessage = {

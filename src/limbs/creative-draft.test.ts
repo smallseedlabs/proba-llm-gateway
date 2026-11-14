@@ -42,6 +42,35 @@ describe('creative.draft_post checks', () => {
     // A product name with a digit is not a claim.
     expect(checkCreativeDraft({ ...ok, headline: 'Trailhead 2 boots for wet trails' }, base).ok).toBe(true);
   });
+
+  it('enforces exact brand casing when the draft mentions a brand from research and attaches validated landing-page images', () => {
+    const withAssets = {
+      ...base,
+      research: {
+        ...research,
+        brandNames: ['Small Seed Labs'],
+        imageUrls: ['https://example.com/og.png', 'https://cdn.example.com/hero.jpg'],
+      },
+    };
+    expect(checkCreativeDraft({ ...ok, headline: 'Built by small seed labs for wet trails' }, withAssets)).toMatchObject({
+      ok: false,
+      code: 'creative_invalid',
+    });
+    const autoAttached = checkCreativeDraft({ ...ok, headline: 'Built by Small Seed Labs for wet trails' }, withAssets);
+    expect(autoAttached).toMatchObject({
+      ok: true,
+      draft: { imageUrl: 'https://example.com/og.png' },
+    });
+    const explicit = checkCreativeDraft({ ...ok, imageUrl: 'https://cdn.example.com/hero.jpg' }, withAssets);
+    expect(explicit).toMatchObject({
+      ok: true,
+      draft: { imageUrl: 'https://cdn.example.com/hero.jpg' },
+    });
+    expect(checkCreativeDraft({ ...ok, imageUrl: 'https://example.com/unverified.png' }, withAssets)).toMatchObject({
+      ok: false,
+      code: 'creative_invalid',
+    });
+  });
 });
 
 describe('creative guardrails are tighten-only', () => {

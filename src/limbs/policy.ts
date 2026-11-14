@@ -52,6 +52,10 @@ export function argumentsMatchSchema(schema: Record<string, unknown>, raw: unkno
       if (typeof spec.minLength === 'number' && text.length < spec.minLength) return `argument ${key} is too short`;
       if (typeof spec.maxLength === 'number' && text.length > spec.maxLength) return `argument ${key} is too long`;
     }
+    if (Array.isArray(raw[key])) {
+      const arr = raw[key] as unknown[];
+      if (typeof spec.maxItems === 'number' && arr.length > spec.maxItems) return `argument ${key} has too many items`;
+    }
     if (Array.isArray(spec.enum) && !spec.enum.includes(raw[key])) return `argument ${key} is not in the enum`;
   }
   return undefined;
@@ -104,7 +108,21 @@ export class CatalogPolicyEngine implements PolicyEngine {
         };
       }
       if (verb.name === 'research.gather') {
-        return { allowed: true, verb, args: { ...rawArgs, url: userUrl } };
+        let lookupUrls: string[] | undefined;
+        if (rawArgs.lookupUrls !== undefined) {
+          if (!Array.isArray(rawArgs.lookupUrls) || rawArgs.lookupUrls.length > 3) {
+            return { allowed: false, code: 'schema', reason: 'lookupUrls must be an array of up to 3 public URLs' };
+          }
+          lookupUrls = [];
+          for (const entry of rawArgs.lookupUrls) {
+            const normalized = normalizeLandingPageUrl(entry);
+            if (!normalized) {
+              return { allowed: false, code: 'user_input', reason: 'each lookupUrls entry must be a public http/https URL' };
+            }
+            lookupUrls.push(normalized);
+          }
+        }
+        return { allowed: true, verb, args: { ...rawArgs, url: userUrl, ...(lookupUrls ? { lookupUrls } : {}) } };
       }
       const creative = ctx.userSuppliedInput?.creative;
       if (!creative) {

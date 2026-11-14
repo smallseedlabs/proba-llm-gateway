@@ -13,6 +13,7 @@ export interface ResearchQuery {
   goalId: string;
   threadId: string;
   landingPageUrl: string;
+  lookupUrls?: readonly string[];
   signal?: AbortSignal;
 }
 

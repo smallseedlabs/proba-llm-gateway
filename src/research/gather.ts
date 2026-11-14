@@ -24,7 +24,8 @@ export async function executeGather(
   runtime: ResearchRuntime,
   _call: LimbCall,
   ctx: LimbExecutionContext,
-  landingPageUrl: string
+  landingPageUrl: string,
+  lookupUrls?: readonly string[]
 ): Promise<LimbResult> {
   const binding = bindingFromCtx(ctx);
   if (!binding) {
@@ -45,6 +46,7 @@ export async function executeGather(
     goalId: binding.goalId,
     threadId: binding.threadId,
     landingPageUrl,
+    ...(lookupUrls?.length ? { lookupUrls } : {}),
     signal: ctx.signal,
   });
   const artifact = artifactFromProvider({

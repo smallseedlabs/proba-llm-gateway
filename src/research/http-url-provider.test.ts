@@ -3,6 +3,15 @@ import { HttpUrlResearchProvider } from './http-url-provider.js';
 import { UnconfiguredResearchProvider } from './unconfigured.js';
 import { TEST_LANDING_URL } from '../testing/research.js';
 
+function pngHeader(width: number, height: number): Buffer {
+  const buf = Buffer.alloc(24);
+  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(buf, 0);
+  buf.write('IHDR', 12, 'ascii');
+  buf.writeUInt32BE(width, 16);
+  buf.writeUInt32BE(height, 20);
+  return buf;
+}
+
 describe('research providers', () => {
   it('unconfigured provider fails honestly without citations', async () => {
     const provider = new UnconfiguredResearchProvider();
@@ -115,5 +124,58 @@ describe('research providers', () => {
     expect(blob).not.toMatch(/ALSO_SECRET/);
     expect(blob).not.toMatch(/SECRET_CSS/);
     expect(blob).not.toMatch(/UNCLOSED_SECRET/);
+  });
+
+  it('extracts brand findings, probes same-site landing page images, and fetches lookupUrls', async () => {
+    const html = `
+      <html>
+        <head>
+          <meta property="og:site_name" content="Small Seed Labs">
+          <meta property="og:image" content="https://example.com/og.png">
+          <meta name="twitter:image" content="https://other.example/foreign.png">
+          <title>Trail shoe | Small Seed Labs</title>
+        </head>
+        <body><p>Buy the trail shoe</p></body>
+      </html>`;
+    const provider = new HttpUrlResearchProvider({
+      timeoutMs: 1000,
+      maxBytes: 8192,
+      resolveAddresses: async () => ['8.8.8.8'],
+      fetchImpl: async (input) => {
+        const u = String(input);
+        if (u === 'https://example.com/og.png') {
+          return new Response(pngHeader(1200, 630), { status: 200, headers: { 'content-type': 'image/png' } });
+        }
+        if (u === 'https://redditinc.com/ad-guide') {
+          return new Response('<html><title>Reddit Ads Guide</title><body>Be direct and specific.</body></html>', {
+            status: 200,
+            headers: { 'content-type': 'text/html' },
+          });
+        }
+        return new Response(html, { status: 200, headers: { 'content-type': 'text/html' } });
+      },
+    });
+    const ok = await provider.research({
+      workspaceId: 'seedbed',
+      userId: '11111111-1111-4111-8111-111111111111',
+      goalId: '11111111-1111-4111-8111-111111111113',
+      threadId: '11111111-1111-4111-8111-111111111114',
+      landingPageUrl: TEST_LANDING_URL,
+      lookupUrls: ['https://redditinc.com/ad-guide'],
+    });
+    expect(ok.ok).toBe(true);
+    if (!ok.ok) return;
+    expect(ok.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'brand-1', text: 'The landing page names the brand as "Small Seed Labs".' }),
+        expect.objectContaining({ id: 'lf-1', sourceIds: ['lookup-1'] }),
+      ])
+    );
+    expect(ok.sources.map((s) => s.sourceId)).toEqual(['page-1', 'img-og-image', 'lookup-1']);
+    expect(ok.sources.find((s) => s.sourceId === 'img-og-image')).toMatchObject({
+      url: 'https://example.com/og.png',
+      contentType: 'image/png',
+      excerpt: 'page image (og:image) 1200x630',
+    });
   });
 });

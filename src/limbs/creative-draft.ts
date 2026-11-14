@@ -58,6 +58,8 @@ export interface CheckedDraft {
   headline: string;
   body: string;
   landingPageUrl: string;
+  /** Validated image from the operator's landing page (accepted img-* research source). */
+  imageUrl?: string;
   claims: DraftClaim[];
   rationale?: string;
   researchArtifactId: string;
@@ -75,7 +77,13 @@ export type DraftCheck =
 export interface DraftCheckInput {
   userLandingPageUrl: string | undefined;
   /** Accepted research for this goal/thread and landing URL; undefined when none is accepted. */
-  research?: { artifactId: string; version: number; findingIds: readonly string[] };
+  research?: {
+    artifactId: string;
+    version: number;
+    findingIds: readonly string[];
+    brandNames?: readonly string[];
+    imageUrls?: readonly string[];
+  };
   rules?: CreativeRules;
   planRules?: PlanRules;
 }
@@ -179,6 +187,39 @@ export function checkCreativeDraft(raw: Record<string, unknown>, input: DraftChe
     };
   }
 
+  for (const brand of input.research.brandNames ?? []) {
+    const trimmed = brand.trim();
+    if (!trimmed) continue;
+    if (phraseHit(text, trimmed) && !text.includes(trimmed)) {
+      return {
+        ok: false,
+        code: 'creative_invalid',
+        reason: `the landing page spells the brand as "${trimmed}"; use that exact spelling and casing`,
+      };
+    }
+  }
+
+  const allowedImages = (input.research.imageUrls ?? [])
+    .map((u) => normalizeLandingPageUrl(u))
+    .filter((u): u is string => Boolean(u));
+  let imageUrl: string | undefined;
+  if (raw.imageUrl !== undefined) {
+    const candidate = typeof raw.imageUrl === 'string' && raw.imageUrl.trim() ? normalizeLandingPageUrl(raw.imageUrl) : undefined;
+    if (!candidate || !allowedImages.includes(candidate)) {
+      return {
+        ok: false,
+        code: 'creative_invalid',
+        reason:
+          allowedImages.length > 0
+            ? `imageUrl must be a validated landing-page image from accepted research (${allowedImages.join(', ')})`
+            : 'no validated landing-page image is in the accepted research; omit imageUrl to draft a text post',
+      };
+    }
+    imageUrl = candidate;
+  } else if (allowedImages.length > 0) {
+    imageUrl = allowedImages[0];
+  }
+
   const rawClaims = raw.claims === undefined ? [] : raw.claims;
   if (!Array.isArray(rawClaims) || rawClaims.length > CREATIVE_LOCKS.maxClaims) {
     return { ok: false, code: 'creative_invalid', reason: `claims must be an array of at most ${CREATIVE_LOCKS.maxClaims} {text, findingId}` };
@@ -218,6 +259,7 @@ export function checkCreativeDraft(raw: Record<string, unknown>, input: DraftChe
       headline,
       body,
       landingPageUrl: userUrl,
+      ...(imageUrl ? { imageUrl } : {}),
       claims,
       ...(rationale ? { rationale } : {}),
       researchArtifactId: input.research.artifactId,

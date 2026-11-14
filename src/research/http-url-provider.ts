@@ -6,11 +6,36 @@
 
 import { createHash } from 'node:crypto';
 import type { ResearchProviderPort, ResearchProviderResult, ResearchQuery } from '../ports/research.js';
+import type { ResearchFinding, ResearchSource, ResearchUnknown } from '../types/research.js';
+import {
+  brandFindingText,
+  extractBrandNames,
+  extractImageCandidates,
+  imageSourceExcerpt,
+  imageSourceId,
+  isOwnSiteUrl,
+} from './page-assets.js';
+import { probeImage } from './image-probe.js';
 import { assertResolvedPublic, parsePublicHttpUrl, UnsafeUrlError } from './ssrf.js';
+
+export const DEFAULT_IMAGE_MAX_BYTES = 3_000_000;
+export const MAX_LOOKUP_URLS = 3;
+export const MIN_IMAGE_WIDTH = 600;
+export const MIN_IMAGE_HEIGHT = 315;
+
+export function imageMeetsSize(width: number, height: number): boolean {
+  return (
+    width <= 10_000 &&
+    height <= 10_000 &&
+    ((width >= MIN_IMAGE_WIDTH && height >= MIN_IMAGE_HEIGHT) || (width >= MIN_IMAGE_HEIGHT && height >= MIN_IMAGE_WIDTH))
+  );
+}
 
 export interface HttpUrlResearchOptions {
   timeoutMs: number;
   maxBytes: number;
+  /** Cap for a single landing-page image fetch (separate from the HTML cap). */
+  imageMaxBytes?: number;
   fetchImpl?: typeof fetch;
   /** Test-only. Production uses DNS + public-IP checks. */
   resolveAddresses?: (url: URL) => Promise<string[]>;
@@ -23,12 +48,14 @@ export class HttpUrlResearchProvider implements ResearchProviderPort {
   readonly configured = true;
   private readonly timeoutMs: number;
   private readonly maxBytes: number;
+  private readonly imageMaxBytes: number;
   private readonly fetchImpl: typeof fetch;
   private readonly resolveAddresses: (url: URL) => Promise<string[]>;
 
   constructor(options: HttpUrlResearchOptions) {
     this.timeoutMs = options.timeoutMs;
     this.maxBytes = options.maxBytes;
+    this.imageMaxBytes = options.imageMaxBytes ?? DEFAULT_IMAGE_MAX_BYTES;
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.resolveAddresses = options.resolveAddresses ?? assertResolvedPublic;
   }
@@ -70,12 +97,13 @@ export class HttpUrlResearchProvider implements ResearchProviderPort {
       }
       const contentType = response.headers.get('content-type') ?? undefined;
       const sha256 = createHash('sha256').update(buf).digest('hex');
-      const excerpt = untrustedExcerpt(buf.toString('utf8'));
+      const html = buf.toString('utf8');
+      const excerpt = untrustedExcerpt(html);
       const fetchedAt = new Date().toISOString();
-      const sources = [
+      const sources: ResearchSource[] = [
         {
           sourceId: SOURCE_ID,
-          kind: 'http_url' as const,
+          kind: 'http_url',
           url: url.toString(),
           fetchedAt,
           contentType,
@@ -83,10 +111,10 @@ export class HttpUrlResearchProvider implements ResearchProviderPort {
           excerpt: excerpt || undefined,
         },
       ];
-      const findings = excerpt
+      const findings: ResearchFinding[] = excerpt
         ? [{ id: 'f1', text: excerpt.slice(0, 500), sourceIds: [SOURCE_ID] }]
         : [];
-      const unknowns = excerpt
+      const unknowns: ResearchUnknown[] = excerpt
         ? [
             {
               id: 'u1',
@@ -101,6 +129,26 @@ export class HttpUrlResearchProvider implements ResearchProviderPort {
           basis: 'user_input' as const,
         },
       ];
+
+      const brands = extractBrandNames(html);
+      brands.forEach((name, i) => {
+        findings.push({ id: `brand-${i + 1}`, text: brandFindingText(name), sourceIds: [SOURCE_ID] });
+      });
+
+      const imageSources = await this.collectPageImages(url.toString(), html, controller.signal);
+      sources.push(...imageSources);
+      if (imageSources.length === 0) {
+        unknowns.push({
+          id: 'u-images',
+          text: 'No validated image was found on the operator landing page domain (og:image, twitter:image, or a large hero). A TEXT post can still be drafted.',
+        });
+      }
+
+      const lookups = await this.collectLookups(query.lookupUrls ?? [], controller.signal);
+      sources.push(...lookups.sources);
+      findings.push(...lookups.findings);
+      unknowns.push(...lookups.unknowns);
+
       return { ok: true, sources, findings, assumptions, unknowns };
     } catch (err) {
       const message = err instanceof Error ? err.message : 'landing page fetch failed';
@@ -112,6 +160,107 @@ export class HttpUrlResearchProvider implements ResearchProviderPort {
       clearTimeout(timer);
       query.signal?.removeEventListener('abort', onOuter);
     }
+  }
+
+  private async fetchPublic(
+    rawUrl: string,
+    signal: AbortSignal,
+    accept: string,
+    maxBytes: number
+  ): Promise<{ ok: true; url: URL; buf: Buffer; contentType: string | undefined } | { ok: false; code: string; message: string }> {
+    let url: URL;
+    try {
+      url = parsePublicHttpUrl(rawUrl);
+      await this.resolveAddresses(url);
+    } catch (err) {
+      const message = err instanceof UnsafeUrlError ? err.message : 'URL is not fetchable';
+      return { ok: false, code: 'ssrf_blocked', message };
+    }
+    try {
+      const response = await this.fetchImpl(url.toString(), {
+        method: 'GET',
+        redirect: 'error',
+        headers: { accept },
+        signal,
+      });
+      if (response.status >= 300 && response.status < 400) {
+        return { ok: false, code: 'ssrf_blocked', message: 'redirects are not followed' };
+      }
+      if (!response.ok) {
+        return { ok: false, code: 'fetch_failed', message: `fetch returned HTTP ${response.status}` };
+      }
+      const buf = Buffer.from(await response.arrayBuffer());
+      if (buf.length > maxBytes) {
+        return { ok: false, code: 'untrusted_content', message: 'body exceeded the untrusted content size cap' };
+      }
+      return { ok: true, url, buf, contentType: response.headers.get('content-type') ?? undefined };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'fetch failed';
+      if (/redirect/i.test(message)) {
+        return { ok: false, code: 'ssrf_blocked', message: 'redirects are not followed' };
+      }
+      return { ok: false, code: 'fetch_failed', message };
+    }
+  }
+
+  private async collectPageImages(landingPageUrl: string, html: string, signal: AbortSignal): Promise<ResearchSource[]> {
+    const sources: ResearchSource[] = [];
+    for (const candidate of extractImageCandidates(html, landingPageUrl)) {
+      if (!isOwnSiteUrl(candidate.url, landingPageUrl)) continue;
+      const fetched = await this.fetchPublic(candidate.url, signal, 'image/*,*/*;q=0.1', this.imageMaxBytes);
+      if (!fetched.ok) continue;
+      const header = (fetched.contentType ?? '').split(';')[0]!.trim().toLowerCase();
+      if (header && header !== 'application/octet-stream' && !header.startsWith('image/')) continue;
+      const probe = probeImage(fetched.buf);
+      if (!probe || !imageMeetsSize(probe.width, probe.height)) continue;
+      if (header && header !== 'application/octet-stream' && header !== probe.contentType) continue;
+      sources.push({
+        sourceId: imageSourceId(candidate.kind),
+        kind: 'http_url',
+        url: fetched.url.toString(),
+        fetchedAt: new Date().toISOString(),
+        contentType: probe.contentType,
+        sha256: createHash('sha256').update(fetched.buf).digest('hex'),
+        excerpt: imageSourceExcerpt(candidate.kind, probe.width, probe.height),
+      });
+    }
+    return sources;
+  }
+
+  private async collectLookups(
+    rawUrls: readonly string[],
+    signal: AbortSignal
+  ): Promise<{ sources: ResearchSource[]; findings: ResearchFinding[]; unknowns: ResearchUnknown[] }> {
+    const sources: ResearchSource[] = [];
+    const findings: ResearchFinding[] = [];
+    const unknowns: ResearchUnknown[] = [];
+    for (const [i, raw] of rawUrls.slice(0, MAX_LOOKUP_URLS).entries()) {
+      const fetched = await this.fetchPublic(raw, signal, 'text/html,text/plain;q=0.9,*/*;q=0.1', this.maxBytes);
+      const sourceId = `lookup-${i + 1}`;
+      if (!fetched.ok) {
+        unknowns.push({
+          id: `u-${sourceId}`,
+          text: `Lookup ${raw} was not used as research (${fetched.code}: ${fetched.message}). Citations were not invented.`,
+        });
+        continue;
+      }
+      const excerpt = untrustedExcerpt(fetched.buf.toString('utf8'));
+      sources.push({
+        sourceId,
+        kind: 'http_url',
+        url: fetched.url.toString(),
+        fetchedAt: new Date().toISOString(),
+        contentType: fetched.contentType,
+        sha256: createHash('sha256').update(fetched.buf).digest('hex'),
+        excerpt: excerpt || undefined,
+      });
+      if (excerpt) {
+        findings.push({ id: `lf-${i + 1}`, text: excerpt.slice(0, 500), sourceIds: [sourceId] });
+      } else {
+        unknowns.push({ id: `u-${sourceId}`, text: `Lookup ${fetched.url.toString()} had no extractable text.` });
+      }
+    }
+    return { sources, findings, unknowns };
   }
 }
 
