@@ -75,9 +75,20 @@ export function brainReviewBrief(request: HubRunRequest, facts: ReviewFacts): st
   const wake = typeof p.wakeEvent === 'string' ? ` (event: ${p.wakeEvent})` : '';
   const checkpoint = typeof p.checkpoint === 'string' ? p.checkpoint : undefined;
   const plan = typeof p.plan === 'object' && p.plan !== null ? JSON.stringify(p.plan).slice(0, 1500) : undefined;
+  const delivery =
+    typeof p.deliveryStatus === 'object' && p.deliveryStatus !== null && !Array.isArray(p.deliveryStatus)
+      ? (p.deliveryStatus as Record<string, unknown>)
+      : undefined;
+  const deliveryLine =
+    delivery && typeof delivery.label === 'string' && typeof delivery.summary === 'string'
+      ? `Platform delivery status (${typeof p.platform === 'string' ? p.platform : 'provider'}): ${delivery.label} — ${delivery.summary}${
+          Array.isArray(delivery.causes) && delivery.causes.length > 0 ? ` Causes: ${delivery.causes.join('; ')}.` : ''
+        }`
+      : undefined;
   return [
     `Campaign review for ${facts.probaCampaignId ?? 'the goal campaign'}, started by Hub: ${trigger}${wake}.`,
     plan ? `Approved plan (the success contract): ${plan}` : 'No approved plan is saved; judge against the goal.',
+    ...(deliveryLine ? [deliveryLine] : []),
     facts.hasAuditedMetrics
       ? 'Audited metrics for this campaign are in the analytics section of your context. Use only those numbers.'
       : 'No audited metrics for this campaign are in context yet: say so, change nothing, and pick a sensible next check.',

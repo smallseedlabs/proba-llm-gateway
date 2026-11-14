@@ -953,6 +953,12 @@ export function snapshotOf(
   error?: { code: string; message: string; retryable: boolean },
   outputs?: BrainOutput[]
 ): RunSnapshot {
+  const createdCampaign =
+    !record.actionOutcome &&
+    record.domainState.createdCampaign &&
+    typeof record.domainState.createdCampaign === 'object'
+      ? (record.domainState.createdCampaign as Record<string, unknown>)
+      : undefined;
   return {
     runId: record.runId,
     status,
@@ -962,7 +968,11 @@ export function snapshotOf(
     progress: { runId: record.runId, status, iteration: record.iteration, usage: record.usage },
     error,
     ...(record.analytics ? { analytics: { ...record.analytics } as Record<string, unknown> } : {}),
-    ...(record.actionOutcome ? { actionOutcome: { ...record.actionOutcome } as Record<string, unknown> } : {}),
+    ...(record.actionOutcome
+      ? { actionOutcome: { ...record.actionOutcome } as Record<string, unknown> }
+      : createdCampaign
+        ? { actionOutcome: { ...createdCampaign } }
+        : {}),
   };
 }
 

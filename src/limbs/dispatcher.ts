@@ -104,6 +104,22 @@ export class DomainLimbExecutor implements LimbExecutor {
         if (!campaigns.includes(result.data.probaCampaignId)) campaigns.push(result.data.probaCampaignId);
         ctx.domainState.probaCampaigns = campaigns;
         if (result.data.mappings) ctx.domainState.providerMappings = result.data.mappings;
+        if (call.verb.name === 'ads.create_campaign') {
+          const firstMapping = result.data.mappings?.[0];
+          ctx.domainState.createdCampaign = {
+            verb: 'ads.create_campaign',
+            ok: true,
+            probaCampaignId: result.data.probaCampaignId,
+            platform: typeof call.args.platform === 'string' ? call.args.platform : (firstMapping?.provider ?? 'reddit'),
+            ...(typeof call.args.dailyBudget === 'number' ? { dailyBudget: call.args.dailyBudget } : {}),
+            ...(typeof call.args.currency === 'string' ? { currency: call.args.currency } : {}),
+            ...(firstMapping?.providerCampaignId ? { providerCampaignId: firstMapping.providerCampaignId } : {}),
+            ...(firstMapping?.providerAdGroupId ? { providerAdGroupId: firstMapping.providerAdGroupId } : {}),
+            ...(firstMapping?.providerAdId ? { providerAdId: firstMapping.providerAdId } : {}),
+            ...(typeof result.data.deliverableAd === 'boolean' ? { deliverableAd: result.data.deliverableAd } : {}),
+            ...(result.data.providerLaunch ? { providerLaunch: result.data.providerLaunch } : {}),
+          };
+        }
       }
       return result.ok ? { ok: true, data: result.data } : { ok: false, code: result.code, message: result.message };
     }
