@@ -23,7 +23,7 @@ describe('run brief', () => {
     });
     expect(text).toMatch(/Landing page: https:\/\/.+ \(operator-supplied\)/);
     expect(text).toContain('Post copy: operator-approved copy is saved on the goal');
-    expect(text).toContain('Tools you can call now: research.gather, ads.create_campaign.');
+    expect(text).toContain('Tools you can call now: research.gather, ads.create_campaign. Every one except research.gather raises an approval card');
     expect(text).toContain('Run budget: loop 2 of at most 4; 1 of 8 tool calls used; 1200 of 20000 tokens used.');
     expect(text).toContain('an answer, an explanation, a clarifying question, a proposal, or a tool call');
     expect(text).toContain('If an action is blocked, say why and what would unblock it.');

@@ -55,7 +55,8 @@ describe('guardrails in the loop', () => {
     expect(snapshot.status).toBe('completed');
     expect(research.calls).toBe(0);
     expect(llm.requests[0]?.tools?.map((t) => t.name) ?? []).not.toContain('research.gather');
-    expect(systemOf(llm, 0)).toContain("Turned off by the operator's guardrails: research.gather.");
+    expect(systemOf(llm, 0)).toContain('Turned off by the gateway guardrails config (deployment-wide): research.gather.');
+    expect(systemOf(llm, 0)).toContain('Each one raises an approval card');
     const toolMsg = llm.requests[1]?.messages.find((m) => m.role === 'tool');
     expect(JSON.parse(String(toolMsg?.content))).toMatchObject({ ok: false, code: 'guardrail' });
   });

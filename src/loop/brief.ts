@@ -52,9 +52,13 @@ export function runBriefText(request: HubRunRequest | undefined, facts: RunBrief
     creativeLine(request),
     'Metrics: come from the Hub analytics review (the analytics section of your context), not from a tool you call.',
     facts.offeredTools.length > 0
-      ? `Tools you can call now: ${facts.offeredTools.join(', ')}. Calling any of them except research.gather raises an approval card for the operator.`
+      ? `Tools you can call now: ${facts.offeredTools.join(', ')}. ${
+          facts.offeredTools.includes('research.gather') ? 'Every one except research.gather' : 'Each one'
+        } raises an approval card for the operator.`
       : 'Tools you can call now: none.',
-    facts.deniedByGuardrails.length > 0 ? `Turned off by the operator's guardrails: ${facts.deniedByGuardrails.join(', ')}.` : '',
+    facts.deniedByGuardrails.length > 0
+      ? `Turned off by the gateway guardrails config (deployment-wide): ${facts.deniedByGuardrails.join(', ')}.`
+      : '',
   ];
   const b = facts.budget;
   if (b) {
