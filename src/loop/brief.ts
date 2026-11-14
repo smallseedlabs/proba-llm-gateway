@@ -45,9 +45,16 @@ function creativeLine(request: HubRunRequest | undefined): string {
 
 export function runBriefText(request: HubRunRequest | undefined, facts: RunBriefFacts): string {
   const url = normalizeLandingPageUrl(request?.userSuppliedInput?.landingPageUrl);
+  const rawConnected = (request?.userSuppliedInput as { connectedPlatforms?: unknown } | undefined)?.connectedPlatforms;
+  const connected = Array.isArray(rawConnected)
+    ? rawConnected.filter((p): p is string => typeof p === 'string' && p.trim().length > 0)
+    : [];
   const lines = [
     '[run]',
     request ? `Step: ${request.stepType}.` : '',
+    connected.length > 0
+      ? `Connected ad platforms in this workspace: ${connected.join(', ')}. Automatically pick the best platform mix (one or all connected platforms), budget split, targeting, and platform-tailored creatives without asking the operator to specify platforms.`
+      : '',
     url
       ? `Landing page: ${url} (operator-supplied).`
       : 'Landing page: none supplied. The operator sets it on the goal; research.gather and ads.create_campaign need it.',
