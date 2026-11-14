@@ -60,6 +60,12 @@ export interface CheckedDraft {
   landingPageUrl: string;
   /** Validated image from the operator's landing page (accepted img-* research source). */
   imageUrl?: string;
+  /** Optional HTTPS video URL for Meta/Reddit video ads. */
+  videoUrl?: string;
+  /** Call-to-action button for visual/Meta ads. */
+  ctaType?: 'LEARN_MORE' | 'SIGN_UP' | 'SHOP_NOW' | 'GET_QUOTE' | 'DOWNLOAD';
+  /** Short creative art-direction note describing the visual composition. */
+  visualBrief?: string;
   claims: DraftClaim[];
   rationale?: string;
   researchArtifactId: string;
@@ -252,6 +258,12 @@ export function checkCreativeDraft(raw: Record<string, unknown>, input: DraftChe
   const plan = checkPlan(raw.plan, input.planRules);
   if (!plan.ok) return { ok: false, code: 'creative_invalid', reason: plan.reason };
   const rationale = typeof raw.rationale === 'string' && raw.rationale.trim() ? raw.rationale.trim().slice(0, 1000) : undefined;
+  const videoUrlRaw = typeof raw.videoUrl === 'string' ? normalizeLandingPageUrl(raw.videoUrl.trim()) : undefined;
+  const ALLOWED_CTA = new Set(['LEARN_MORE', 'SIGN_UP', 'SHOP_NOW', 'GET_QUOTE', 'DOWNLOAD']);
+  const ctaType = typeof raw.ctaType === 'string' && ALLOWED_CTA.has(raw.ctaType)
+    ? (raw.ctaType as CheckedDraft['ctaType'])
+    : undefined;
+  const visualBrief = typeof raw.visualBrief === 'string' && raw.visualBrief.trim() ? raw.visualBrief.trim().slice(0, 500) : undefined;
   return {
     ok: true,
     draft: {
@@ -260,6 +272,9 @@ export function checkCreativeDraft(raw: Record<string, unknown>, input: DraftChe
       body,
       landingPageUrl: userUrl,
       ...(imageUrl ? { imageUrl } : {}),
+      ...(videoUrlRaw ? { videoUrl: videoUrlRaw } : {}),
+      ...(ctaType ? { ctaType } : {}),
+      ...(visualBrief ? { visualBrief } : {}),
       claims,
       ...(rationale ? { rationale } : {}),
       researchArtifactId: input.research.artifactId,

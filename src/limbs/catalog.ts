@@ -100,7 +100,7 @@ export const VERB_CATALOG: readonly VerbDefinition[] = [
     verb: 'draft_post',
     name: 'creative.draft_post',
     description:
-      'Propose the campaign plan in ONE card: the Reddit TEXT post (headline + body) plus optional targeting and plan defaults (success metric, platform, duration) for this goal from the goal, the operator page and the ACCEPTED research. The operator sees it as an approval card and may edit it; only their approval saves it as the goal creative, after which ads.create_campaign can run. Use this when no creative is saved yet. Write for Reddit: plain, specific, no hype. Any factual claim (numbers, prices, superlatives) must be listed in claims with the accepted research findingId it comes from. Never include URLs other than the operator landing page; never invent a landing page.',
+      'Propose a campaign plan & creative card (copy + visual media + CTA + optional targeting + plan defaults) for either reddit or meta (Facebook & Instagram) from the goal, the operator page and the ACCEPTED research. For reddit: write plain, specific post copy. For meta: craft visual-first creative (concise primary text, punchy headline <= 40 chars, imageUrl or videoUrl, ctaType, and visualBrief). When the goal or connected ad accounts include Meta or multiple platforms, propose plan.platform accordingly (and draft separate cards for reddit and meta when targeting both). Never invent URLs or ungrounded factual claims.',
     parameters: {
       type: 'object',
       additionalProperties: false,
@@ -127,15 +127,31 @@ export const VERB_CATALOG: readonly VerbDefinition[] = [
           description:
             'Optional validated image URL from an accepted img-* research source on the operator landing page. When omitted and an accepted img-* source exists, the first validated landing-page image is attached automatically.',
         },
+        videoUrl: {
+          type: 'string',
+          minLength: 1,
+          maxLength: 2048,
+          description: 'Optional HTTPS video URL (MP4/MOV/WebM) for Meta/Reddit video creatives.',
+        },
+        ctaType: {
+          type: 'string',
+          enum: ['LEARN_MORE', 'SIGN_UP', 'SHOP_NOW', 'GET_QUOTE', 'DOWNLOAD'],
+          description: 'Call-to-action button for visual/Meta ads (default LEARN_MORE).',
+        },
+        visualBrief: {
+          type: 'string',
+          maxLength: 500,
+          description: 'Short creative art-direction note describing the visual composition or hero image/video angle.',
+        },
         targeting: {
           type: 'object',
           description:
-            'Your proposed Reddit targeting: communities (subreddit names, no r/ or t5_), geolocations (country codes like GB, US), interests, keywords, platforms, languages. Choose from the goal, page and research; explain each in plan.reasons.',
+            'Your proposed targeting: communities (Reddit subreddit names, no r/ or t5_), geolocations (country codes like GB, US), interests, keywords, platforms, languages. Choose from the goal, page and research; explain each in plan.reasons.',
         },
         plan: {
           type: 'object',
           description:
-            'Defaults you chose so the operator does not have to: platform (reddit), successMetric (clicks|ctr|cpc|landing_page_views|signups|conversions), successTarget (number over the run), durationDays, reasons {field: "chose X because Y"}.',
+            'Defaults you chose so the operator does not have to: platform (reddit | meta), successMetric (clicks|ctr|cpc|landing_page_views|signups|conversions), successTarget (number over the run), durationDays, reasons {field: "chose X because Y"}.',
         },
       },
     },
