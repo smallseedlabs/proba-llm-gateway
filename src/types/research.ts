@@ -80,6 +80,10 @@ export const approvedCreativeSchema = z.union([
       type: z.literal('TEXT'),
       headline: z.string().min(1).max(300),
       body: z.string().min(1).max(40_000),
+      imageUrl: z.string().min(1).max(2048).optional(),
+      videoUrl: z.string().min(1).max(2048).optional(),
+      ctaType: z.string().min(1).max(64).optional(),
+      visualBrief: z.string().min(1).max(500).optional(),
     })
     .strict(),
   z
@@ -89,6 +93,9 @@ export const approvedCreativeSchema = z.union([
       body: z.string().min(1).max(40_000).optional(),
       mediaUrl: z.string().min(1).max(2048),
       callToAction: z.string().min(1).max(64).optional(),
+      videoUrl: z.string().min(1).max(2048).optional(),
+      ctaType: z.string().min(1).max(64).optional(),
+      visualBrief: z.string().min(1).max(500).optional(),
     })
     .strict(),
 ]);
@@ -97,10 +104,12 @@ export type ApprovedCreative = z.infer<typeof approvedCreativeSchema>;
 export const userSuppliedInputSchema = z
   .object({
     landingPageUrl: z.string().min(1).max(2048),
-    /** Operator-approved copy/media for the Reddit structured post. */
+    /** Operator-approved copy/media for the structured ad. */
     creative: approvedCreativeSchema.optional(),
-    /** Operator-approved targeting (Ads validates the Reddit shape). */
+    /** Operator-approved targeting (Ads validates the platform shape). */
     targeting: z.record(z.string(), z.unknown()).optional(),
+    /** Workspace ad platforms currently connected (e.g. ['reddit', 'meta']). */
+    connectedPlatforms: z.array(z.string().min(1).max(32)).max(16).optional(),
   })
   .strict();
 export type UserSuppliedInput = z.infer<typeof userSuppliedInputSchema>;
