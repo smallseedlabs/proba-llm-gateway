@@ -3,7 +3,7 @@ import type { LlmMessage } from '../types/llm.js';
 import type { HubRunRequest } from '../types/run.js';
 import { llmToolDefinitions } from '../limbs/catalog.js';
 import { normalizeLandingPageUrl } from '../research/input.js';
-import { FALLBACK_SELF, runBriefText, type RunBriefFacts } from './brief.js';
+import { FALLBACK_SELF, runBriefText, runBudgetText, type RunBriefFacts, type RunBudgetView } from './brief.js';
 
 const SYSTEM_RULES = [
   'You are the Proba brain inside the gateway harness.',
@@ -71,21 +71,34 @@ function operatorInputLine(request: HubRunRequest | undefined): string {
 }
 
 /**
+ * The byte-stable head of every system message: the self core (or the one-line fallback) and the fixed safety rules. It depends only
+ * on the self memory version, never on the run, the loop or the context, so providers with prefix caching (DeepSeek reports
+ * `prompt_cache_hit_tokens`) reuse it across loops and runs. Nothing per-run may be added before its end.
+ */
+export function systemPrefix(packet: ContextPacket | undefined, withFallback = true): string {
+  const self = packet ? selfMemoryText(packet) : '';
+  const core = self || (withFallback ? FALLBACK_SELF : '');
+  return core ? `[self]\n${core}\n\n${SYSTEM_RULES}` : SYSTEM_RULES;
+}
+
+/**
  * System text, generated per loop:
- *   [self]   Proba's self memory from the context packet (who Proba is, the end goal, success, right and wrong, limbs),
- *            or a one-line fallback when the packet has none;
- *   the fixed safety rules (unchanged) and the operator landing URL;
- *   [run]    the run brief (inputs present or missing and where they come from, tools on, budget left) when the loop supplies it;
- *   the rest of the context packet.
+ *   systemPrefix   self core + SYSTEM_RULES (unchanged), byte-stable across loops and runs of the same self version;
+ *   then everything per run: the operator landing URL, the [run] brief (inputs present or missing and where they come from, tools
+ *   on and off) and the rest of the context packet (including relevant self detail entries).
+ * The per-loop budget is not here: it goes in a trailing message (runBudgetMessage) so the conversation before it stays cacheable.
  * The text informs the model; it does not dictate what to return. Policy code still enforces every limit whatever the text says.
  */
 function systemText(packet: ContextPacket | undefined, request: HubRunRequest | undefined, brief?: RunBriefFacts): string {
-  const self = packet ? selfMemoryText(packet) : '';
   const contextBlock = packet ? packetToText(packet, { excludeSelf: true }) : '';
-  const rules = `${SYSTEM_RULES}${operatorInputLine(request)}`;
-  const head = self ? `[self]\n${self}\n\n${rules}` : brief ? `[self]\n${FALLBACK_SELF}\n\n${rules}` : rules;
+  const head = `${systemPrefix(packet, brief !== undefined)}${operatorInputLine(request)}`;
   const base = brief ? `${head}\n\n${runBriefText(request, brief)}` : head;
   return contextBlock ? `${base}\n\nRelevant context:\n${contextBlock}` : base;
+}
+
+/** The per-loop budget, sent as the last message of each model call (not stored in the run's messages). */
+export function runBudgetMessage(budget: RunBudgetView): LlmMessage {
+  return { role: 'system', content: runBudgetText(budget) };
 }
 
 export function initialMessages(packet: ContextPacket | undefined, request: HubRunRequest, brief?: RunBriefFacts): LlmMessage[] {

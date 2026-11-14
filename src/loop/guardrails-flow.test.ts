@@ -76,8 +76,10 @@ describe('guardrails in the loop', () => {
     const snapshot = await coordinator.start(testRunRequest({ userSuppliedInput: userLanding(), budget: { maxIterations: 6 } }), testCaller());
     expect(snapshot.status).toBe('completed');
     const system = systemOf(llm, 0);
-    expect(system).toContain('Run budget: loop 1 of at most 2;');
-    expect(system).toContain('how many is your choice within the budget');
+    const last = llm.requests[0]?.messages.at(-1);
+    expect(last).toMatchObject({ role: 'system' });
+    expect(last?.content).toContain('[run budget] Loop 1 of at most 2;');
+    expect(system).toContain('how many is your choice within the run budget');
     expect(system).not.toMatch(/must (end|finish) with a proposal/i);
   });
 });

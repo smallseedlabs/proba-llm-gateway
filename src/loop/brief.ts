@@ -21,7 +21,6 @@ export interface RunBriefFacts {
   offeredTools: readonly string[];
   /** Verbs the operator guardrails turned off. */
   deniedByGuardrails: readonly string[];
-  budget?: RunBudgetView;
 }
 
 /** Used only when the context packet carries no self memory (memory-api unavailable). The full self lives in proba-memory. */
@@ -60,18 +59,20 @@ export function runBriefText(request: HubRunRequest | undefined, facts: RunBrief
       ? `Turned off by the gateway guardrails config (deployment-wide): ${facts.deniedByGuardrails.join(', ')}.`
       : '',
   ];
-  const b = facts.budget;
-  if (b) {
-    const tokens = b.maxTotalTokens === null ? `${b.tokens} tokens used` : `${b.tokens} of ${b.maxTotalTokens} tokens used`;
-    lines.push(`Run budget: loop ${b.iteration} of at most ${b.maxIterations}; ${b.toolCalls} of ${b.maxToolCalls} tool calls used; ${tokens}.`);
-    if (b.iteration >= b.maxIterations) {
-      lines.push('This is the last loop the budget allows: respond with the most useful answer you have now, and say what is still unknown.');
-    }
-  }
   lines.push(
-    'How you work: you may think, research, re-evaluate and refine over several loops; how many is your choice within the budget. ' +
+    'How you work: you may think, research, re-evaluate and refine over several loops; how many is your choice within the run budget (sent each loop as [run budget]). ' +
       'Then return whatever best moves the goal forward: an answer, an explanation, a clarifying question, a proposal, or a tool call. ' +
       'If an action is blocked, say why and what would unblock it.'
   );
   return lines.filter((l) => l.length > 0).join('\n');
+}
+
+/** Budget used vs the run's upper bounds, for the current loop. Sent as the last message of each model call. */
+export function runBudgetText(b: RunBudgetView): string {
+  const tokens = b.maxTotalTokens === null ? `${b.tokens} tokens used` : `${b.tokens} of ${b.maxTotalTokens} tokens used`;
+  const lines = [`[run budget] Loop ${b.iteration} of at most ${b.maxIterations}; ${b.toolCalls} of ${b.maxToolCalls} tool calls used; ${tokens}.`];
+  if (b.iteration >= b.maxIterations) {
+    lines.push('This is the last loop the budget allows: respond with the most useful answer you have now, and say what is still unknown.');
+  }
+  return lines.join('\n');
 }

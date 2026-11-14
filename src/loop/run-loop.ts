@@ -39,11 +39,11 @@ import type { PolicyEngine } from '../ports/policy.js';
 import type { LlmTurnRecord, PendingApproval, RunRecord, ToolTurnRecord } from '../ports/run-store.js';
 import type { Clock } from '../ports/clock.js';
 import type { GatewayServiceConfig } from '../types/config.js';
-import type { CompleteRequest, LlmToolCall, TurnResponse } from '../types/llm.js';
+import type { CompleteRequest, LlmMessage, LlmToolCall, TurnResponse } from '../types/llm.js';
 import type { HubRunRequest, RunSnapshot, RunStatus } from '../types/run.js';
 import type { RunUsageLedger } from '../usage/reservations.js';
 import type { Cancellation } from '../ports/cancellation.js';
-import { initialMessages, offeredTools, parseToolArguments, refreshSystem } from './messages.js';
+import { initialMessages, offeredTools, parseToolArguments, refreshSystem, runBudgetMessage } from './messages.js';
 import type { RunBriefFacts } from './brief.js';
 import { NO_GUARDRAILS, verbMode } from '../guardrails/guardrails.js';
 import { gatewayAuditEvent, llmTurnAuditEvents } from './audit-events.js';
@@ -158,13 +158,12 @@ export async function runBoundedLoop(
     const brief: RunBriefFacts = {
       offeredTools: offeredTools(toolFilter).map((t) => t.name),
       deniedByGuardrails: Object.entries(guardrails.verbs).filter(([, mode]) => mode === 'deny').map(([name]) => name),
-      budget: usage.budgetView(),
     };
     record.messages =
       record.messages.length === 0 ? initialMessages(packet, request, brief) : refreshSystem(record.messages, packet, request, brief);
 
     usage.assertCanCallLlm();
-    const turn = await callLlm(deps, record, request, cancellation, usage, toolFilter);
+    const turn = await callLlm(deps, record, request, cancellation, usage, toolFilter, runBudgetMessage(usage.budgetView()));
     if (turn.finishReason === 'tool_calls' && turn.message.toolCalls?.length) {
       try {
         await dispatchTools(deps, record, request, turn.message.toolCalls, cancellation, usage, turn.message);
@@ -235,10 +234,13 @@ async function callLlm(
   request: HubRunRequest,
   cancellation: Cancellation,
   usage: RunUsageLedger,
-  limbFilter?: (name: string) => boolean
+  limbFilter?: (name: string) => boolean,
+  trailer?: LlmMessage
 ): Promise<TurnResponse> {
   const tools = offeredTools(limbFilter);
-  const fingerprint = hashedLlmTurn(record.messages, tools);
+  // The trailing per-loop message (run budget) is sent but not stored in the run's messages, so earlier turns stay a stable prefix.
+  const messages = trailer ? [...record.messages, trailer] : record.messages;
+  const fingerprint = hashedLlmTurn(messages, tools);
   const existing = record.llmTurns.find((t) => t.fingerprint === fingerprint);
   if (existing?.state === 'completed' && existing.response) return existing.response;
   if (existing?.state === 'ambiguous' || existing?.state === 'inflight') {
@@ -254,7 +256,7 @@ async function callLlm(
     userId: request.userId,
     goalId: request.goalId,
     threadId: request.threadId,
-    messages: record.messages,
+    messages,
     tools,
     maxTokens,
     idempotencyKey: randomUUID(),
