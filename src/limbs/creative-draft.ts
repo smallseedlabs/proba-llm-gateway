@@ -257,6 +257,17 @@ export function checkCreativeDraft(raw: Record<string, unknown>, input: DraftChe
   if (!targeting.ok) return { ok: false, code: 'creative_invalid', reason: targeting.reason };
   const plan = checkPlan(raw.plan, input.planRules);
   if (!plan.ok) return { ok: false, code: 'creative_invalid', reason: plan.reason };
+  if (
+    plan.plan?.platform === 'reddit' &&
+    /^\s*(?:chose|chosen|selected|picked|using)\s+meta\b/i.test(plan.plan.reasons.platform ?? '')
+  ) {
+    return {
+      ok: false,
+      code: 'creative_invalid',
+      reason:
+        'plan.platform is "reddit" while plan.reasons.platform describes Meta; set plan.platform to "meta" and craft Meta-native creative (headline <= 40 chars, concise primary text, ctaType, and visualBrief or mediaUrl)',
+    };
+  }
   const rationale = typeof raw.rationale === 'string' && raw.rationale.trim() ? raw.rationale.trim().slice(0, 1000) : undefined;
   const videoUrlRaw = typeof raw.videoUrl === 'string' ? normalizeLandingPageUrl(raw.videoUrl.trim()) : undefined;
   const ALLOWED_CTA = new Set(['LEARN_MORE', 'SIGN_UP', 'SHOP_NOW', 'GET_QUOTE', 'DOWNLOAD']);

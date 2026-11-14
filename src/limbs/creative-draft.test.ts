@@ -122,6 +122,19 @@ describe('plan card sections (targeting + defaults)', () => {
     expect(checkCreativeDraft({ ...ok, targeting: { communities: ['t5_abc'] } }, base).ok).toBe(false);
     expect(checkCreativeDraft({ ...ok, targeting: { bid: 5 } }, base).ok).toBe(false);
     expect(checkCreativeDraft({ ...ok, plan: { successMetric: 'clicks', platform: 'meta' } }, base).ok).toBe(true);
+    expect(
+      checkCreativeDraft(
+        {
+          ...ok,
+          plan: {
+            successMetric: 'clicks',
+            platform: 'reddit',
+            reasons: { platform: 'Chose Meta as the second card for broader reach.' },
+          },
+        },
+        base
+      )
+    ).toMatchObject({ ok: false, code: 'creative_invalid' });
     expect(checkCreativeDraft({ ...ok, plan: { successMetric: 'clicks', platform: 'tiktok' } }, base).ok).toBe(false);
     expect(checkCreativeDraft({ ...ok, plan: { successMetric: 'clicks', durationDays: 365 } }, base).ok).toBe(false);
     expect(checkCreativeDraft({ ...ok, plan: { successMetric: 'vibes' } }, base).ok).toBe(false);
