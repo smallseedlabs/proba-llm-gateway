@@ -1,21 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { executeWebSearch, parseDuckDuckGoHtml } from './web-search.js';
+import { executeWebSearch, parseBingRss } from './web-search.js';
 
-const SAMPLE_HTML = `
-<div class="result">
-  <h2 class="result__title">
-    <a rel="nofollow" class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fbusiness.reddithelp.com%2Fminimum-budget">Reddit Ads Minimum Budget</a>
-  </h2>
-  <a class="result__snippet" href="#">Minimum daily budget on Reddit Ads is $5 per day.</a>
-</div>
+const SAMPLE_RSS = `<?xml version="1.0" encoding="utf-8" ?>
+<rss version="2.0"><channel>
+  <item>
+    <title>Reddit Ads Minimum Budget &amp; Spend</title>
+    <link>https://business.reddithelp.com/minimum-budget</link>
+    <description>Minimum daily budget on Reddit Ads is $5 per day.</description>
+  </item>
+</channel></rss>
 `;
 
 describe('web-search', () => {
-  it('parses DuckDuckGo HTML results and unwraps uddg redirect URLs', () => {
-    const results = parseDuckDuckGoHtml(SAMPLE_HTML, 5);
+  it('parses Bing RSS items cleanly', () => {
+    const results = parseBingRss(SAMPLE_RSS, 5);
     expect(results).toEqual([
       {
-        title: 'Reddit Ads Minimum Budget',
+        title: 'Reddit Ads Minimum Budget & Spend',
         url: 'https://business.reddithelp.com/minimum-budget',
         snippet: 'Minimum daily budget on Reddit Ads is $5 per day.',
       },
@@ -24,9 +25,9 @@ describe('web-search', () => {
 
   it('executes web.search with injected fetch and returns structured results', async () => {
     const mockFetch = async () =>
-      new Response(SAMPLE_HTML, {
+      new Response(SAMPLE_RSS, {
         status: 200,
-        headers: { 'content-type': 'text/html' },
+        headers: { 'content-type': 'application/rss+xml' },
       });
 
     const result = await executeWebSearch('reddit ads minimum daily budget', 3, mockFetch);
@@ -34,10 +35,10 @@ describe('web-search', () => {
     if (!result.ok) return;
     expect(result.data).toMatchObject({
       query: 'reddit ads minimum daily budget',
-      source: 'duckduckgo',
+      source: 'bing_rss',
       results: [
         {
-          title: 'Reddit Ads Minimum Budget',
+          title: 'Reddit Ads Minimum Budget & Spend',
           url: 'https://business.reddithelp.com/minimum-budget',
         },
       ],
