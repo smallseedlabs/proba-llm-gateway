@@ -43,7 +43,7 @@ export function argumentsMatchSchema(schema: Record<string, unknown>, raw: unkno
   }
   const properties = isRecord(schema.properties) ? schema.properties : {};
   for (const [key, spec] of Object.entries(properties)) {
-    if (raw[key] === undefined) continue;
+    if (raw[key] === undefined || (raw[key] === null && !required.includes(key))) continue;
     if (!isRecord(spec)) continue;
     if (!typeOk(typeof spec.type === 'string' ? spec.type : undefined, raw[key])) {
       return `argument ${key} has the wrong type`;
@@ -72,8 +72,17 @@ export class CatalogPolicyEngine implements PolicyEngine {
     if (!verb.allowlisted) {
       return { allowed: false, code: 'allowlist', reason: `${verb.name} is not allowlisted` };
     }
-    const schemaIssue = argumentsMatchSchema(verb.parameters, rawArgs);
+    let candidateArgs = rawArgs;
+    if (verb.name === 'web.search' && isRecord(rawArgs) && typeof rawArgs.maxResults === 'string') {
+      const trimmed = rawArgs.maxResults.trim();
+      if (/^\d+(\.\d+)?$/.test(trimmed)) {
+        candidateArgs = { ...rawArgs, maxResults: Number(trimmed) };
+      }
+    }
+    const schemaIssue = argumentsMatchSchema(verb.parameters, candidateArgs);
     if (schemaIssue) return { allowed: false, code: 'schema', reason: schemaIssue };
+    if (!isRecord(candidateArgs)) return { allowed: false, code: 'schema', reason: 'arguments must be an object' };
+    rawArgs = candidateArgs;
     if (!isRecord(rawArgs)) return { allowed: false, code: 'schema', reason: 'arguments must be an object' };
     const userUrl = normalizeLandingPageUrl(ctx.userSuppliedInput?.landingPageUrl);
     if (verb.name === 'creative.draft_post') {

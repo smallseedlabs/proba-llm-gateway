@@ -174,4 +174,15 @@ describe('limb policy and domain executor', () => {
       })
     ).toMatchObject({ allowed: false, code: 'user_input' });
   });
+
+  it('normalizes string or null maxResults on web.search without rejecting schema', () => {
+    expect(policy.evaluate('web.search', { query: 'organic tea ads', maxResults: '6' }, ctx)).toMatchObject({
+      allowed: true,
+      args: { query: 'organic tea ads', maxResults: 6 },
+    });
+    expect(policy.evaluate('web.search', { query: 'organic tea ads', maxResults: null }, ctx)).toMatchObject({
+      allowed: true,
+      args: { query: 'organic tea ads', maxResults: 5 },
+    });
+  });
 });
