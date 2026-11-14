@@ -177,7 +177,13 @@ export async function runBoundedLoop(
       record.messages.length === 0 ? initialMessages(packet, request, brief) : refreshSystem(record.messages, packet, request, brief);
 
     usage.assertCanCallLlm();
-    const turn = await callLlm(deps, record, request, cancellation, usage, toolFilter, runBudgetMessage(usage.budgetView()));
+    let turn = await callLlm(deps, record, request, cancellation, usage, toolFilter, runBudgetMessage(usage.budgetView()));
+    if (turn.finishReason === 'length') {
+      turn = await retryTruncatedCompletion(deps, record, request, cancellation, usage, toolFilter, turn);
+      if (turn.finishReason === 'length') {
+        return finishTruncatedCompletion(deps, record);
+      }
+    }
     if (turn.finishReason === 'tool_calls' && turn.message.toolCalls?.length) {
       try {
         await dispatchTools(deps, record, request, turn.message.toolCalls, cancellation, usage, turn.message);
@@ -250,11 +256,12 @@ async function callLlm(
   cancellation: Cancellation,
   usage: RunUsageLedger,
   limbFilter?: (name: string) => boolean,
-  trailer?: LlmMessage
+  trailer?: LlmMessage | LlmMessage[]
 ): Promise<TurnResponse> {
   const tools = offeredTools(limbFilter);
   // The trailing per-loop message (run budget) is sent but not stored in the run's messages, so earlier turns stay a stable prefix.
-  const messages = trailer ? [...record.messages, trailer] : record.messages;
+  const trailers = trailer ? (Array.isArray(trailer) ? trailer : [trailer]) : [];
+  const messages = trailers.length ? [...record.messages, ...trailers] : record.messages;
   const fingerprint = hashedLlmTurn(messages, tools);
   const existing = record.llmTurns.find((t) => t.fingerprint === fingerprint);
   if (existing?.state === 'completed' && existing.response) return existing.response;
@@ -724,7 +731,63 @@ async function acceptedResearchFor(
   return { artifactId: artifact.artifactId, version: artifact.version, findingIds: artifact.findings.map((f) => f.id) };
 }
 
+const TRUNCATED_COMPLETION_NUDGE: LlmMessage = {
+  role: 'system',
+  content:
+    'Your previous reply was truncated at the completion token limit. Continue and be concise. If you call a tool, emit complete valid arguments in a single call.',
+};
+
+export const TRUNCATED_COMPLETION_CODE = 'completion_truncated';
+
+export function truncatedCompletionMessage(detail?: string): string {
+  const extra = detail?.trim() ? ` ${detail.trim()}` : '';
+  return (
+    'The model reply was cut off because it reached the completion token limit, so this run is blocked instead of finishing with an empty or partial card.' +
+    extra +
+    ' Raise the completion cap (BRAIN_MAX_OUTPUT_TOKENS on Hub, or GATEWAY_MAX_COMPLETION_TOKENS on the gateway; both are configurable and tighten-only) or split the step so the model can finish in fewer tokens.'
+  );
+}
+
+async function retryTruncatedCompletion(
+  deps: LoopBodyDeps,
+  record: RunRecord,
+  request: HubRunRequest,
+  cancellation: Cancellation,
+  usage: RunUsageLedger,
+  toolFilter: ((name: string) => boolean) | undefined,
+  turn: TurnResponse
+): Promise<TurnResponse> {
+  const lengthTurns = record.llmTurns.filter((t) => t.response?.finishReason === 'length').length;
+  if (lengthTurns !== 1) return turn;
+  try {
+    usage.assertCanCallLlm();
+  } catch (err) {
+    if (err instanceof BudgetExhaustedError) {
+      return turn;
+    }
+    throw err;
+  }
+  return callLlm(deps, record, request, cancellation, usage, toolFilter, [
+    runBudgetMessage(usage.budgetView()),
+    TRUNCATED_COMPLETION_NUDGE,
+  ]);
+}
+
+async function finishTruncatedCompletion(
+  deps: Pick<LoopBodyDeps, 'clock' | 'persist' | 'relay'>,
+  record: RunRecord,
+  detail?: string
+): Promise<RunSnapshot> {
+  const message = truncatedCompletionMessage(detail);
+  return finish(deps, record, 'blocked', [{ type: 'reply', text: message }], {
+    code: TRUNCATED_COMPLETION_CODE,
+    message,
+    retryable: true,
+  });
+}
+
 async function blockedSnapshot(
+
   deps: Pick<LoopBodyDeps, 'clock' | 'persist' | 'relay'>,
   record: RunRecord,
   needs: CapabilityNeed[]

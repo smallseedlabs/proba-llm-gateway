@@ -46,14 +46,22 @@ export function observedSpendUsd(totals: UsageTotals): ObservedSpend {
   return { kind: 'numeric', amount: totals.cost.estimate, pricingVersion: totals.cost.pricingVersion };
 }
 
+/**
+ * Default completion cap for a call/run when no explicit run cap is set.
+ * Planning and drafting need more than the historic 512-token context reserve.
+ * Configurable via GATEWAY_MAX_COMPLETION_TOKENS; operator guardrails can only tighten it.
+ */
+export const DEFAULT_COMPLETION_TOKEN_CAP = 4000;
+
 /** Completion tokens this complete() will request. Matches the gateway loop cap. */
 export function nextCompletionTokenCap(limits: UsageLimits, totals: UsageTotals): number {
-  const remainingCompletion =
-    limits.maxCompletionTokens === null
-      ? limits.responseTokenReserve
-      : Math.max(1, limits.maxCompletionTokens - totals.completionTokens);
-  const reserve = limits.responseTokenReserve || remainingCompletion;
-  return Math.max(1, Math.min(reserve, remainingCompletion));
+  // responseTokenReserve is subtracted from the context budget only. It must not
+  // clip the model's output: a 512 reserve truncated creative.draft_post mid-call
+  // even when the run budget was 1500 (gateway run 2a478a37).
+  if (limits.maxCompletionTokens === null) {
+    return Math.max(1, DEFAULT_COMPLETION_TOKEN_CAP);
+  }
+  return Math.max(1, limits.maxCompletionTokens - totals.completionTokens);
 }
 
 export function nextCallTokenBounds(
