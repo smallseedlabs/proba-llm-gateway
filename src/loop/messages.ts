@@ -3,6 +3,7 @@ import type { LlmMessage } from '../types/llm.js';
 import type { HubRunRequest } from '../types/run.js';
 import { llmToolDefinitions } from '../limbs/catalog.js';
 import { normalizeLandingPageUrl } from '../research/input.js';
+import { FALLBACK_SELF, runBriefText, type RunBriefFacts } from './brief.js';
 
 const SYSTEM_RULES = [
   'You are the Proba brain inside the gateway harness.',
@@ -70,20 +71,25 @@ function operatorInputLine(request: HubRunRequest | undefined): string {
 }
 
 /**
- * System text: Proba's self memory first (identity, success, right and wrong behaviour, limbs), then the fixed safety rules and the
- * operator input, then the rest of the context packet. The safety rules are unchanged and always present; policy code still
- * enforces every limit whatever the text says.
+ * System text, generated per loop:
+ *   [self]   Proba's self memory from the context packet (who Proba is, the end goal, success, right and wrong, limbs),
+ *            or a one-line fallback when the packet has none;
+ *   the fixed safety rules (unchanged) and the operator landing URL;
+ *   [run]    the run brief (inputs present or missing and where they come from, tools on, budget left) when the loop supplies it;
+ *   the rest of the context packet.
+ * The text informs the model; it does not dictate what to return. Policy code still enforces every limit whatever the text says.
  */
-function systemText(packet: ContextPacket | undefined, request: HubRunRequest | undefined): string {
+function systemText(packet: ContextPacket | undefined, request: HubRunRequest | undefined, brief?: RunBriefFacts): string {
   const self = packet ? selfMemoryText(packet) : '';
   const contextBlock = packet ? packetToText(packet, { excludeSelf: true }) : '';
   const rules = `${SYSTEM_RULES}${operatorInputLine(request)}`;
-  const base = self ? `[self]\n${self}\n\n${rules}` : rules;
+  const head = self ? `[self]\n${self}\n\n${rules}` : brief ? `[self]\n${FALLBACK_SELF}\n\n${rules}` : rules;
+  const base = brief ? `${head}\n\n${runBriefText(request, brief)}` : head;
   return contextBlock ? `${base}\n\nRelevant context:\n${contextBlock}` : base;
 }
 
-export function initialMessages(packet: ContextPacket | undefined, request: HubRunRequest): LlmMessage[] {
-  const system = systemText(packet, request);
+export function initialMessages(packet: ContextPacket | undefined, request: HubRunRequest, brief?: RunBriefFacts): LlmMessage[] {
+  const system = systemText(packet, request, brief);
   return [
     { role: 'system', content: system },
     { role: 'user', content: commandToUserText(request) },
@@ -93,9 +99,10 @@ export function initialMessages(packet: ContextPacket | undefined, request: HubR
 export function refreshSystem(
   messages: LlmMessage[],
   packet: ContextPacket | undefined,
-  request?: HubRunRequest
+  request?: HubRunRequest,
+  brief?: RunBriefFacts
 ): LlmMessage[] {
-  const system = systemText(packet, request);
+  const system = systemText(packet, request, brief);
   const rest = messages.filter((m) => m.role !== 'system');
   return [{ role: 'system', content: system }, ...rest];
 }

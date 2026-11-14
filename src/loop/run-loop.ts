@@ -44,6 +44,8 @@ import type { HubRunRequest, RunSnapshot, RunStatus } from '../types/run.js';
 import type { RunUsageLedger } from '../usage/reservations.js';
 import type { Cancellation } from '../ports/cancellation.js';
 import { initialMessages, offeredTools, parseToolArguments, refreshSystem } from './messages.js';
+import type { RunBriefFacts } from './brief.js';
+import { NO_GUARDRAILS, verbMode } from '../guardrails/guardrails.js';
 import { gatewayAuditEvent, llmTurnAuditEvents } from './audit-events.js';
 import { RequestValidationError } from '../errors.js';
 
@@ -149,10 +151,20 @@ export async function runBoundedLoop(
     }
     const iteration = usage.recordIteration();
     record.iteration = iteration;
-    record.messages = record.messages.length === 0 ? initialMessages(packet, request) : refreshSystem(record.messages, packet, request);
+    const guardrails = deps.config.guardrails ?? NO_GUARDRAILS;
+    const limbFilter = offeredToolFilter(preflight.offeredLimbs);
+    // Operator guardrails can only remove verbs: a denied verb is not offered (and is refused if called anyway).
+    const toolFilter = (name: string) => limbFilter(name) && verbMode(guardrails, name) !== 'deny';
+    const brief: RunBriefFacts = {
+      offeredTools: offeredTools(toolFilter).map((t) => t.name),
+      deniedByGuardrails: Object.entries(guardrails.verbs).filter(([, mode]) => mode === 'deny').map(([name]) => name),
+      budget: usage.budgetView(),
+    };
+    record.messages =
+      record.messages.length === 0 ? initialMessages(packet, request, brief) : refreshSystem(record.messages, packet, request, brief);
 
     usage.assertCanCallLlm();
-    const turn = await callLlm(deps, record, request, cancellation, usage, offeredToolFilter(preflight.offeredLimbs));
+    const turn = await callLlm(deps, record, request, cancellation, usage, toolFilter);
     if (turn.finishReason === 'tool_calls' && turn.message.toolCalls?.length) {
       try {
         await dispatchTools(deps, record, request, turn.message.toolCalls, cancellation, usage, turn.message);
@@ -360,6 +372,29 @@ async function dispatchTools(
       throw new PolicyDeniedError(decision.reason);
     }
 
+    // Only modes the operator configured act here; the code's own approval rules (incl. owner auto_with_limits) are unchanged.
+    const guardrailMode = (deps.config.guardrails ?? NO_GUARDRAILS).verbs[decision.verb.name];
+    if (guardrailMode === 'deny') {
+      record.events.push(
+        gatewayAuditEvent(request, {
+          action: 'policy.denied',
+          outcome: 'denied',
+          occurredAt: deps.clock.isoNow(),
+          details: { verb: call.name, code: 'guardrail', guardrailsVersion: (deps.config.guardrails ?? NO_GUARDRAILS).version },
+        })
+      );
+      record.messages.push({
+        role: 'tool',
+        content: JSON.stringify({
+          ok: false,
+          code: 'guardrail',
+          message: `${decision.verb.name} is turned off by the operator's guardrails. Tell the operator it is blocked by guardrails and that changing the guardrails config would unblock it.`,
+        }),
+        toolCallId: call.id,
+      });
+      continue;
+    }
+
     const argsHash = canonicalArgsHash(decision.args);
     const documents = await deps.actionPolicyStore.list(request.workspaceId);
     const campaignId = campaignIdOf(decision.args, request);
@@ -423,7 +458,8 @@ async function dispatchTools(
       throw new PolicyDeniedError('approval does not bind this operation, arguments and workspace');
     }
     const resume = request.resume ?? record.lastResume;
-    const approval = action.requiresHubApproval
+    // Guardrail `ask` adds an approval card where the code would not need one; it never removes one.
+    const approval = action.requiresHubApproval || guardrailMode === 'ask'
       ? deps.approval.decide(
           {
             askId,

@@ -191,6 +191,18 @@ export class RunUsageLedger implements UsageLedger {
     return { ...this.totals, cost: { ...this.totals.cost } };
   }
 
+  /** What the model is told about its run budget: current loop and what is used of each bound. */
+  budgetView(): { iteration: number; maxIterations: number; toolCalls: number; maxToolCalls: number; tokens: number; maxTotalTokens: number | null } {
+    return {
+      iteration: this.iterations,
+      maxIterations: this.limits.maxIterations,
+      toolCalls: this.totals.toolCalls,
+      maxToolCalls: this.limits.maxToolCalls,
+      tokens: this.totals.promptTokens + this.totals.completionTokens,
+      maxTotalTokens: this.limits.maxTotalTokens,
+    };
+  }
+
   assertCanStartIteration(): void {
     if (this.iterations >= this.limits.maxIterations) {
       throw new BudgetExhaustedError(`iteration cap ${this.limits.maxIterations} reached`);

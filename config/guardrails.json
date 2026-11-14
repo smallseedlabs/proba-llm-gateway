@@ -1,0 +1,7 @@
+{
+  "schema": "proba.gateway-guardrails/v1",
+  "version": "2026-11-14.1",
+  "description": "Operator guardrails for the gateway. Can only TIGHTEN the code locks and the GATEWAY_MAX_* deployment limits; anything looser is refused at start-up. verbs: allow|ask|deny per verb (allow only where the code needs no approval). limits: maxIterations, maxLlmCalls, maxToolCalls, maxPromptTokens, maxCompletionTokens, maxTotalTokens, maxCostUsd per run. Env GATEWAY_VERB_POLICY and GATEWAY_GUARDRAIL_MAX_* can tighten this file further. Shipped empty: no extra restriction.",
+  "verbs": {},
+  "limits": {}
+}

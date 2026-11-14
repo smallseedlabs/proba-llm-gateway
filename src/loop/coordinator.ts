@@ -1,3 +1,4 @@
+import { NO_GUARDRAILS, applyGuardrailLimits } from '../guardrails/guardrails.js';
 /**
  * Bounded orchestration loop (the harness lives here, not a separate service).
  * See run-loop.ts for context → LLM → policy → approval → domain → repeat.
@@ -343,7 +344,7 @@ export class LoopCoordinator {
     if (request.budget?.maxCostUsd !== undefined) overlay.maxCostUsd = request.budget.maxCostUsd;
     if (request.budget?.responseTokenReserve !== undefined) overlay.responseTokenReserve = request.budget.responseTokenReserve;
     if (request.budget?.contextBudgetTokens !== undefined) overlay.contextBudgetTokens = request.budget.contextBudgetTokens;
-    return mergeLimits(
+    const merged = mergeLimits(
       {
         maxIterations: limits.maxIterations,
         maxLlmCalls: limits.maxLlmCalls,
@@ -357,5 +358,7 @@ export class LoopCoordinator {
       },
       overlay
     );
+    // Operator guardrails are ceilings over both the deployment limits and the Hub run budget.
+    return applyGuardrailLimits(merged, this.deps.config.guardrails ?? NO_GUARDRAILS);
   }
 }
