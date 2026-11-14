@@ -594,6 +594,7 @@ export async function runPreflight(
   const offeredLimbs = [
     'page',
     'research',
+    'creative',
     ...(intent.kind === 'ads_mutate'
       ? adsReport?.service.state === 'ready'
         ? (['ads'] as const)

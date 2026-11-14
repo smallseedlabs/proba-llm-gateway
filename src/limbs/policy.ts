@@ -7,6 +7,7 @@
 import type { PolicyContext, PolicyDecision, PolicyEngine } from '../ports/policy.js';
 import { normalizeLandingPageUrl } from '../research/input.js';
 import { verbByName } from './catalog.js';
+import { checkCreativeDraft } from './creative-draft.js';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -70,6 +71,18 @@ export class CatalogPolicyEngine implements PolicyEngine {
     if (schemaIssue) return { allowed: false, code: 'schema', reason: schemaIssue };
     if (!isRecord(rawArgs)) return { allowed: false, code: 'schema', reason: 'arguments must be an object' };
     const userUrl = normalizeLandingPageUrl(ctx.userSuppliedInput?.landingPageUrl);
+    if (verb.name === 'creative.draft_post') {
+      const checked = checkCreativeDraft(rawArgs, {
+        userLandingPageUrl: ctx.userSuppliedInput?.landingPageUrl,
+        research: ctx.acceptedResearch,
+        rules: ctx.creativeRules,
+      });
+      if (!checked.ok) {
+        // user_input here is still non-fatal for the run: the model is told and can fix the draft or ask.
+        return { allowed: false, code: checked.code === 'user_input' ? 'creative_invalid' : checked.code, reason: checked.reason };
+      }
+      return { allowed: true, verb, args: { ...checked.draft } };
+    }
     if (verb.name === 'research.gather' || verb.name === 'ads.create_campaign') {
       if (!userUrl) {
         return {
@@ -97,9 +110,8 @@ export class CatalogPolicyEngine implements PolicyEngine {
       if (!creative) {
         return {
           allowed: false,
-          code: 'user_input',
-          reason:
-            'ads.create_campaign requires operator-approved creative (userSuppliedInput.creative) so Ads can create the post; the model cannot author ad copy or media',
+          code: 'creative_missing',
+          reason: CREATIVE_MISSING_REASON,
         };
       }
       const imageUrl = typeof creative.mediaUrl === 'string' ? normalizeLandingPageUrl(creative.mediaUrl) : undefined;
@@ -124,3 +136,11 @@ export class CatalogPolicyEngine implements PolicyEngine {
     return { allowed: true, verb, args: rawArgs };
   }
 }
+
+/**
+ * Actionable reason for a create without operator copy. The check is unchanged (no
+ * creative, no campaign); the run is told what the operator must do so it can say so
+ * and finish, instead of failing the run.
+ */
+export const CREATIVE_MISSING_REASON =
+  'ads.create_campaign needs approved post copy and none is saved for this goal. Draft it with creative.draft_post (from the goal, page and accepted research); the operator approves or edits the draft, which saves it, then call ads.create_campaign again. The operator can also save their own copy in Campaigns. Approved copy is never bypassed.';
