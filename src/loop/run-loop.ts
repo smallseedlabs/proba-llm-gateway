@@ -48,6 +48,7 @@ import { initialMessages, offeredTools, parseToolArguments, refreshSystem, runBu
 import type { RunBriefFacts } from './brief.js';
 import { creativeRulesFrom, NO_GUARDRAILS, verbMode } from '../guardrails/guardrails.js';
 import { gatewayAuditEvent, llmTurnAuditEvents } from './audit-events.js';
+import { blockedReplyOutputs, blockedReplyText } from './blocked-reply.js';
 import { RequestValidationError } from '../errors.js';
 
 export interface LoopBodyDeps {
@@ -701,6 +702,12 @@ async function dispatchTools(
         }
       }
     } catch (err) {
+      // Successful research.gather already persisted a result and then threw
+      // ApprovalRequiredError to pause for acceptance. Do not overwrite that
+      // completed turn as failed — the gather is awaiting approval, not broken.
+      if (err instanceof ApprovalRequiredError && toolTurn.state === 'completed' && toolTurn.result && 'ok' in toolTurn.result && toolTurn.result.ok) {
+        throw err;
+      }
       const aborted = cancellation.signal.aborted || (err instanceof ToolRefusedError && /ambiguous/.test(err.message));
       toolTurn.state = aborted ? 'ambiguous' : 'failed';
       toolTurn.result = {
@@ -786,25 +793,19 @@ async function finishTruncatedCompletion(
   });
 }
 
-async function blockedSnapshot(
-
+export async function blockedSnapshot(
   deps: Pick<LoopBodyDeps, 'clock' | 'persist' | 'relay'>,
   record: RunRecord,
-  needs: CapabilityNeed[]
+  needs: CapabilityNeed[],
+  fallbackMessage?: string
 ): Promise<RunSnapshot> {
-  const questions = needs.map((need) => need.question ?? need.message);
+  const text = blockedReplyText(needs, fallbackMessage ?? needs[0]?.message);
   return finish(
     deps,
     record,
     'blocked',
-    [
-      {
-        type: 'clarify',
-        reason: needs[0]?.message ?? 'required capabilities are not ready; no paid model call was made',
-        questions: questions.map((text, i) => ({ id: `cap-${i + 1}`, text, type: 'text' as const })),
-      },
-    ],
-    { code: 'preflight_blocked', message: needs[0]?.message ?? 'preflight blocked', retryable: true },
+    blockedReplyOutputs(needs, fallbackMessage ?? needs[0]?.message),
+    { code: 'preflight_blocked', message: text, retryable: true },
     needs
   );
 }

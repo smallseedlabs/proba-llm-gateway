@@ -53,10 +53,17 @@ const KNOWN_IDS = new Set(Object.keys(PREREQUISITE_NODES) as PrerequisiteId[]);
 /** Verbs that increase ad spend. Locked policy requires billing immediately before these. */
 const SPEND_INCREASE_VERBS = new Set(['ads.create_campaign', 'ads.resume_campaign', 'create_campaign', 'resume_campaign']);
 const SAFETY_DECREASE_VERBS = new Set(['ads.pause_campaign', 'pause_campaign']);
+/** Short ads verb names that may be passed without the `ads.` prefix. Do not prefix other limbs. */
+const ADS_SHORT_VERBS = new Set(['create_campaign', 'resume_campaign', 'pause_campaign', 'update_campaign', 'move_budget']);
+
+export function canonicalAdsVerb(verb: string): string {
+  if (verb.startsWith('ads.')) return verb;
+  return ADS_SHORT_VERBS.has(verb) ? `ads.${verb}` : verb;
+}
 
 export function spendClassForVerb(verb: string | undefined, args?: Record<string, unknown>): SpendClass {
   if (!verb) return 'none';
-  const name = verb.startsWith('ads.') ? verb : `ads.${verb}`;
+  const name = canonicalAdsVerb(verb);
   if (SAFETY_DECREASE_VERBS.has(verb) || SAFETY_DECREASE_VERBS.has(name)) return 'safety_decrease';
   if (SPEND_INCREASE_VERBS.has(verb) || SPEND_INCREASE_VERBS.has(name)) return 'spend_increase';
   if (name === 'ads.update_campaign' || verb === 'update_campaign') {

@@ -29,6 +29,7 @@ import type { Cancellation } from '../ports/cancellation.js';
 import { AmbiguousOutcomeError, ToolRefusedError } from '../errors.js';
 import { gatewayAuditEvent } from './audit-events.js';
 import { finish, type LoopBodyDeps } from './run-loop.js';
+import { blockedReplyOutputs, blockedReplyText } from './blocked-reply.js';
 
 export const APPROVED_ACTION_VERBS = new Set(['ads.pause_campaign', 'ads.update_campaign']);
 
@@ -240,13 +241,15 @@ export async function runApprovedAction(
     })
   );
   if (!preflight.allowed) {
+    const needs = preflight.needs as CapabilityNeed[];
+    const text = blockedReplyText(needs, preflight.needs[0]?.message ?? 'preflight blocked');
     return finish(
       deps,
       record,
       'blocked',
-      [],
-      { code: 'preflight_blocked', message: preflight.needs[0]?.message ?? 'preflight blocked', retryable: true },
-      preflight.needs as CapabilityNeed[]
+      blockedReplyOutputs(needs, preflight.needs[0]?.message),
+      { code: 'preflight_blocked', message: text, retryable: true },
+      needs
     );
   }
 

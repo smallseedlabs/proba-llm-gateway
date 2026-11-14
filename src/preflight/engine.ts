@@ -130,12 +130,20 @@ export function invalidateAdsRemoteEvidence(evidence: readonly PrerequisiteEvide
   return (evidence ?? []).filter((item) => !item.id.startsWith('ads.') || item.id === 'ads.service');
 }
 
-function mutateIntent(mutate: { verb: string; args: Record<string, unknown> }): OperationIntent {
+/**
+ * Classify a tool about to execute. Only ads.* verbs require Ads domain
+ * preflight (connection, permissions, blueprint, billing). Drafting a post,
+ * analytics review and other non-ads limbs must not demand a campaign mapping.
+ */
+export function mutateIntent(mutate: { verb: string; args: Record<string, unknown> }): OperationIntent {
   if (mutate.verb.startsWith('page.')) {
     return { kind: 'page_mutate', requiresPage: true, requiresAds: false, spendClass: 'none' };
   }
   if (mutate.verb.startsWith('research.')) {
     return { kind: 'research_mutate', requiresAds: false, requiresPage: false, spendClass: 'none' };
+  }
+  if (!mutate.verb.startsWith('ads.')) {
+    return { kind: 'read_or_plan', requiresAds: false, requiresPage: false, spendClass: 'none' };
   }
   const verb = mutate.verb;
   const spendClass = spendClassForVerb(verb, mutate.args);

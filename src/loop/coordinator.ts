@@ -42,7 +42,7 @@ import type { GatewayServiceConfig } from '../types/config.js';
 import { RunCancellation, RunDeadline } from './cancellation.js';
 import { mergeLimits, RunUsageLedger } from '../usage/reservations.js';
 import type { UsageLimits } from '../ports/usage.js';
-import { finish, runBoundedLoop, snapshotOf } from './run-loop.js';
+import { finish, runBoundedLoop, snapshotOf, blockedSnapshot } from './run-loop.js';
 import { gatewayAuditEvent } from './audit-events.js';
 
 export interface LoopCoordinatorDeps {
@@ -247,7 +247,7 @@ export class LoopCoordinator {
         return finish(body, record, 'failed', [], { code: err.code, message: err.message, retryable: false });
       }
       if (err instanceof PreflightBlockedError) {
-        return finish(body, record, 'blocked', [], { code: err.code, message: err.message, retryable: true }, err.needs);
+        return blockedSnapshot(body, record, err.needs as import('../types/preflight.js').CapabilityNeed[], err.message);
       }
       if (err instanceof ApprovalRequiredError) {
         return record.snapshot ?? snapshotOf(record, 'awaiting_approval');

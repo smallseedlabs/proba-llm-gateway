@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { applyPreflightToRecord, runPreflight } from './engine.js';
+import { applyPreflightToRecord, mutateIntent, runPreflight } from './engine.js';
+import { operationManifest } from './graph.js';
 import { testConfig } from '../testing/config.js';
 import { AdjustableClock, RecordingAdsDomain, ScriptedContextPort, ScriptedLlmClient } from '../testing/doubles.js';
 import { ContextClientError } from '../ports/context.js';
@@ -321,5 +322,37 @@ describe('preflight graph engine', () => {
       true
     );
     expect(llm.completeCalls).toBe(0);
+  });
+});
+
+
+describe('mutateIntent', () => {
+  it('does not require a campaign mapping or billing to execute creative.draft_post', () => {
+    const intent = mutateIntent({
+      verb: 'creative.draft_post',
+      args: { headline: 'Hello', body: 'A specific Reddit post body.' },
+    });
+    expect(intent).toMatchObject({ kind: 'read_or_plan', requiresAds: false, spendClass: 'none' });
+    const manifest = operationManifest({ phase: 'mutate', intent });
+    expect(manifest.requires).not.toContain('ads.blueprint');
+    expect(manifest.requires).not.toContain('ads.billing');
+    expect(manifest.requires).not.toContain('ads.service');
+  });
+
+  it('still requires billing and not a mapping when creating a campaign', () => {
+    const intent = mutateIntent({
+      verb: 'ads.create_campaign',
+      args: { name: 'Spring', landingPageUrl: 'https://example.com', dailyBudget: 5, currency: 'USD', platform: 'reddit' },
+    });
+    expect(intent).toMatchObject({ kind: 'ads_mutate', mappingRequired: false, spendClass: 'spend_increase' });
+    const manifest = operationManifest({ phase: 'mutate', intent });
+    expect(manifest.requires).toContain('ads.billing');
+    expect(manifest.requires).not.toContain('ads.blueprint');
+  });
+
+  it('requires a mapping for campaign mutations that target an existing campaign', () => {
+    const intent = mutateIntent({ verb: 'ads.pause_campaign', args: { probaCampaignId: 'camp-1' } });
+    expect(intent).toMatchObject({ kind: 'ads_mutate', mappingRequired: true });
+    expect(operationManifest({ phase: 'mutate', intent }).requires).toContain('ads.blueprint');
   });
 });
