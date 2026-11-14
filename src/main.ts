@@ -17,6 +17,7 @@ async function main(): Promise<void> {
     config,
     coordinator: runtime.coordinator,
     auth: runtime.auth,
+    adminAuth: runtime.adminAuth,
     audit: runtime.audit,
     clock: runtime.clock,
     logger: runtime.logger,

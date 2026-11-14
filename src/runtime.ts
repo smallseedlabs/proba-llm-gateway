@@ -9,6 +9,7 @@ import { ConfigError } from './errors.js';
 import { loadPublicKeySet } from './auth/public-key-set.js';
 import { loadSigningPrivateKey } from './auth/private-key.js';
 import { ServiceTokenAuth } from './auth/service-token.js';
+import { FirebaseAdminAuth, type AdminAuth } from './auth/admin-auth.js';
 import { createLlmTokenSigner } from './auth/mint-llm-token.js';
 import { LogAuditPublisher, RedisAuditPublisher } from './adapters/audit-redis.js';
 import { FileRunStore } from './adapters/file-run-store.js';
@@ -49,6 +50,7 @@ export interface RuntimeOverrides {
   audit?: AuditPublisher;
   clock?: Clock;
   auth?: ServiceAuth;
+  adminAuth?: AdminAuth;
   hubKeys?: JWTVerifyGetKey;
   assertionKeys?: JWTVerifyGetKey;
   llm?: LlmClient;
@@ -69,6 +71,7 @@ export interface GatewayRuntime {
   config: GatewayServiceConfig;
   coordinator: LoopCoordinator;
   auth: ServiceAuth;
+  adminAuth?: AdminAuth;
   audit: AuditPublisher;
   clock: Clock;
   logger: Logger;
@@ -240,6 +243,14 @@ export async function createRuntime(config: GatewayServiceConfig, overrides: Run
     ).keys;
   }
 
+  let adminAuth = overrides.adminAuth;
+  if (!adminAuth && config.admin.firebaseProjectId) {
+    adminAuth = new FirebaseAdminAuth({
+      projectId: config.admin.firebaseProjectId,
+      adminEmails: config.admin.adminEmails,
+    });
+  }
+
   const coordinator = new LoopCoordinator({
     config,
     clock,
@@ -262,6 +273,7 @@ export async function createRuntime(config: GatewayServiceConfig, overrides: Run
     config,
     coordinator,
     auth,
+    adminAuth,
     audit,
     clock,
     logger,

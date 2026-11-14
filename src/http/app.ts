@@ -24,6 +24,8 @@ import { redactDetails } from '../redact.js';
 import type { Logger } from '../logger.js';
 import type { RunSnapshot } from '../types/run.js';
 import { SlidingWindowRateLimiter } from './rate-limit.js';
+import { registerAdminGuardrails } from './admin-guardrails.js';
+import type { AdminAuth } from '../auth/admin-auth.js';
 
 export const SERVICE_NAME = GATEWAY_SERVICE_NAME;
 
@@ -31,6 +33,10 @@ export interface AppDeps {
   config: GatewayServiceConfig;
   coordinator: LoopCoordinator;
   auth: ServiceAuth;
+  /** Firebase administrator auth for /v1/admin/*. Absent: those routes return 503. */
+  adminAuth?: AdminAuth;
+  /** Env used to reload guardrails after a write. Defaults to process.env. */
+  guardrailsEnv?: NodeJS.ProcessEnv;
   audit: AuditPublisher;
   clock: Clock;
   logger: Logger;
@@ -165,6 +171,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       return mapRunError(deps, reply, err);
     }
   });
+
+  registerAdminGuardrails(app, deps);
 
   return app;
 }
