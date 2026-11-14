@@ -60,7 +60,7 @@ async function adminApp(options: {
   });
   const audit = new MemoryAuditPublisher();
   const app = Fastify({ logger: false });
-  registerAdminGuardrails(app, {
+  await registerAdminGuardrails(app, {
     config,
     adminAuth: options.auth === null ? undefined : (options.auth ?? new FakeAdminAuth()),
     audit,

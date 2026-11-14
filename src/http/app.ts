@@ -172,7 +172,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     }
   });
 
-  registerAdminGuardrails(app, deps);
+  await registerAdminGuardrails(app, deps);
 
   return app;
 }

@@ -8,6 +8,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import rateLimit from '@fastify/rate-limit';
 import { IdentityRejectedError } from '../ports/auth.js';
 import { AdminAuthorizationError, type AdminAuth, type AdminSession } from '../auth/admin-auth.js';
 import { ConfigError } from '../errors.js';
@@ -141,66 +142,78 @@ async function authenticateAdmin(
   }
 }
 
-export function registerAdminGuardrails(app: FastifyInstance, deps: AdminRouteDeps): void {
+export async function registerAdminGuardrails(app: FastifyInstance, deps: AdminRouteDeps): Promise<void> {
   const origins = deps.config.admin.corsOrigins;
   const controller = new GuardrailsController(deps.config, deps.guardrailsEnv ?? process.env);
-  const limiter = new SlidingWindowRateLimiter(deps.config.limits.rateLimitMax, deps.config.limits.rateLimitWindowMs);
+  // Per-email window after auth; @fastify/rate-limit covers the IP dimension that CodeQL models.
+  const emailLimiter = new SlidingWindowRateLimiter(deps.config.limits.rateLimitMax, deps.config.limits.rateLimitWindowMs);
 
   const rateLimited = (reply: FastifyReply) =>
     reply.status(429).send(errorBody('rate_limited', 'caller exceeded the request rate limit'));
 
-  app.options(PATH, async (request, reply) => {
-    applyAdminCors(request, reply, origins);
-    return reply.status(204).send();
-  });
+  await app.register(async (scope) => {
+    await scope.register(rateLimit, {
+      global: true,
+      max: deps.config.limits.rateLimitMax,
+      timeWindow: deps.config.limits.rateLimitWindowMs,
+      errorResponseBuilder: () => ({
+        statusCode: 429,
+        error: 'rate_limited',
+        message: 'caller exceeded the request rate limit',
+      }),
+    });
 
-  app.get(PATH, async (request, reply) => {
-    applyAdminCors(request, reply, origins);
-    if (!limiter.allow(`ip:${request.ip}`)) return rateLimited(reply);
-    const sessionOrReply = await authenticateAdmin(deps, request, reply);
-    if (!('email' in sessionOrReply)) return sessionOrReply;
-    if (!limiter.allow(`admin:${sessionOrReply.email}`)) return rateLimited(reply);
-    return reply.status(200).send(controller.snapshot());
-  });
+    scope.options(PATH, { config: { rateLimit: false } }, async (request, reply) => {
+      applyAdminCors(request, reply, origins);
+      return reply.status(204).send();
+    });
 
-  app.put(PATH, async (request, reply) => {
-    applyAdminCors(request, reply, origins);
-    if (!limiter.allow(`ip:${request.ip}`)) return rateLimited(reply);
-    const sessionOrReply = await authenticateAdmin(deps, request, reply);
-    if (!('email' in sessionOrReply)) return sessionOrReply;
-    const session = sessionOrReply;
-    if (!limiter.allow(`admin:${session.email}`)) return rateLimited(reply);
-    const before = controller.snapshot();
-    try {
-      const after = controller.replace(request.body);
-      await auditChanged(deps, session, before, after);
-      return reply.status(200).send(after);
-    } catch (err) {
-      if (err instanceof ConfigError) {
-        const info = getAuditActionInfo('config.changed');
-        try {
-          await deps.audit.publish(
-            buildAuditEvent({
-              traceId: randomUUID(),
-              workspaceId: deps.config.admin.workspaceId,
-              actor: { type: 'user', id: session.subject },
-              service: GATEWAY_SERVICE_NAME,
-              action: 'config.changed',
-              category: info?.category ?? 'config',
-              outcome: 'denied',
-              errorCode: 'guardrails_rejected',
-              riskLevel: info?.riskLevel ?? 'medium',
-              occurredAt: deps.clock.isoNow(),
-              details: redactDetails({ target: 'guardrails', reason: err.message }),
-            })
-          );
-        } catch {
-          // Still fail closed on the request.
+    scope.get(PATH, async (request, reply) => {
+      applyAdminCors(request, reply, origins);
+      const sessionOrReply = await authenticateAdmin(deps, request, reply);
+      if (!('email' in sessionOrReply)) return sessionOrReply;
+      if (!emailLimiter.allow(`admin:${sessionOrReply.email}`)) return rateLimited(reply);
+      return reply.status(200).send(controller.snapshot());
+    });
+
+    scope.put(PATH, async (request, reply) => {
+      applyAdminCors(request, reply, origins);
+      const sessionOrReply = await authenticateAdmin(deps, request, reply);
+      if (!('email' in sessionOrReply)) return sessionOrReply;
+      const session = sessionOrReply;
+      if (!emailLimiter.allow(`admin:${session.email}`)) return rateLimited(reply);
+      const before = controller.snapshot();
+      try {
+        const after = controller.replace(request.body);
+        await auditChanged(deps, session, before, after);
+        return reply.status(200).send(after);
+      } catch (err) {
+        if (err instanceof ConfigError) {
+          const info = getAuditActionInfo('config.changed');
+          try {
+            await deps.audit.publish(
+              buildAuditEvent({
+                traceId: randomUUID(),
+                workspaceId: deps.config.admin.workspaceId,
+                actor: { type: 'user', id: session.subject },
+                service: GATEWAY_SERVICE_NAME,
+                action: 'config.changed',
+                category: info?.category ?? 'config',
+                outcome: 'denied',
+                errorCode: 'guardrails_rejected',
+                riskLevel: info?.riskLevel ?? 'medium',
+                occurredAt: deps.clock.isoNow(),
+                details: redactDetails({ target: 'guardrails', reason: err.message }),
+              })
+            );
+          } catch {
+            // Still fail closed on the request.
+          }
+          return reply.status(400).send(errorBody('guardrails_rejected', err.message));
         }
-        return reply.status(400).send(errorBody('guardrails_rejected', err.message));
+        deps.logger.error({ err: err instanceof Error ? err.name : 'error' }, 'guardrails write failed');
+        return reply.status(500).send(errorBody('internal', 'internal error'));
       }
-      deps.logger.error({ err: err instanceof Error ? err.name : 'error' }, 'guardrails write failed');
-      return reply.status(500).send(errorBody('internal', 'internal error'));
-    }
+    });
   });
 }
