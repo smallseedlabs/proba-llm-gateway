@@ -19,6 +19,7 @@ import type { AuditPublisher } from '../ports/audit-publisher.js';
 import type { Clock } from '../ports/clock.js';
 import type { Logger } from '../logger.js';
 import type { GatewayServiceConfig } from '../types/config.js';
+import { SlidingWindowRateLimiter } from './rate-limit.js';
 
 export interface AdminRouteDeps {
   config: GatewayServiceConfig;
@@ -143,6 +144,10 @@ async function authenticateAdmin(
 export function registerAdminGuardrails(app: FastifyInstance, deps: AdminRouteDeps): void {
   const origins = deps.config.admin.corsOrigins;
   const controller = new GuardrailsController(deps.config, deps.guardrailsEnv ?? process.env);
+  const limiter = new SlidingWindowRateLimiter(deps.config.limits.rateLimitMax, deps.config.limits.rateLimitWindowMs);
+
+  const rateLimited = (reply: FastifyReply) =>
+    reply.status(429).send(errorBody('rate_limited', 'caller exceeded the request rate limit'));
 
   app.options(PATH, async (request, reply) => {
     applyAdminCors(request, reply, origins);
@@ -151,16 +156,20 @@ export function registerAdminGuardrails(app: FastifyInstance, deps: AdminRouteDe
 
   app.get(PATH, async (request, reply) => {
     applyAdminCors(request, reply, origins);
+    if (!limiter.allow(`ip:${request.ip}`)) return rateLimited(reply);
     const sessionOrReply = await authenticateAdmin(deps, request, reply);
     if (!('email' in sessionOrReply)) return sessionOrReply;
+    if (!limiter.allow(`admin:${sessionOrReply.email}`)) return rateLimited(reply);
     return reply.status(200).send(controller.snapshot());
   });
 
   app.put(PATH, async (request, reply) => {
     applyAdminCors(request, reply, origins);
+    if (!limiter.allow(`ip:${request.ip}`)) return rateLimited(reply);
     const sessionOrReply = await authenticateAdmin(deps, request, reply);
     if (!('email' in sessionOrReply)) return sessionOrReply;
     const session = sessionOrReply;
+    if (!limiter.allow(`admin:${session.email}`)) return rateLimited(reply);
     const before = controller.snapshot();
     try {
       const after = controller.replace(request.body);

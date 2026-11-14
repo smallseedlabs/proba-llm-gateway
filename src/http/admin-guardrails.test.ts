@@ -43,17 +43,20 @@ async function adminApp(options: {
   auth?: AdminAuth | null;
   corsOrigins?: string[];
   envExtra?: NodeJS.ProcessEnv;
+  rateLimitMax?: number;
 }) {
   const env: NodeJS.ProcessEnv = { GATEWAY_GUARDRAILS_FILE: options.path, ...options.envExtra };
+  const base = testConfig();
   const config = testConfig({
     guardrailsFile: options.path,
-    guardrails: loadGuardrails(env, testConfig().limits, { defaultFile: '/nonexistent' }),
+    guardrails: loadGuardrails(env, base.limits, { defaultFile: '/nonexistent' }),
     admin: {
       firebaseProjectId: 'test',
       adminEmails: ['owner@example.com'],
       corsOrigins: options.corsOrigins ?? ['http://localhost:3410'],
       workspaceId: 'seedbed',
     },
+    limits: options.rateLimitMax ? { ...base.limits, rateLimitMax: options.rateLimitMax, rateLimitWindowMs: 60_000 } : base.limits,
   });
   const audit = new MemoryAuditPublisher();
   const app = Fastify({ logger: false });
@@ -209,6 +212,24 @@ describe('GET/PUT /v1/admin/guardrails', () => {
         headers: { origin: 'http://evil.example' },
       });
       expect(other.headers['access-control-allow-origin']).toBeUndefined();
+    } finally {
+      await app.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('rate-limits repeated administrator calls', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'gw-admin-'));
+    const path = join(dir, 'g.json');
+    await writeFile(path, JSON.stringify(seed));
+    const { app } = await adminApp({ path, rateLimitMax: 2 });
+    try {
+      const headers = { authorization: 'Bearer test' };
+      expect((await app.inject({ method: 'GET', url: '/v1/admin/guardrails', headers })).statusCode).toBe(200);
+      expect((await app.inject({ method: 'GET', url: '/v1/admin/guardrails', headers })).statusCode).toBe(200);
+      const limited = await app.inject({ method: 'GET', url: '/v1/admin/guardrails', headers });
+      expect(limited.statusCode).toBe(429);
+      expect(limited.json().error).toBe('rate_limited');
     } finally {
       await app.close();
       await rm(dir, { recursive: true, force: true });
