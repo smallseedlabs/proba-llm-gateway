@@ -370,7 +370,9 @@ async function dispatchTools(
         content: JSON.stringify({ ok: false, code: decision.code, message: decision.reason }),
         toolCallId: call.id,
       });
-      if (decision.code === 'unknown_verb' || decision.code === 'allowlist') continue;
+      // Refused, but not fatal: the model is told what is missing (operator copy) and can tell the
+      // operator what to do. The create itself never runs without creative.
+      if (decision.code === 'unknown_verb' || decision.code === 'allowlist' || decision.code === 'creative_missing') continue;
       throw new PolicyDeniedError(decision.reason);
     }
 
