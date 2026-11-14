@@ -46,7 +46,7 @@ export function packetToText(packet: ContextPacket, options: { excludeSelf?: boo
         .map((item) => item.text ?? (item.data !== undefined ? JSON.stringify(item.data) : ''))
         .filter((text) => text.length > 0)
         .join('\n');
-      return `[${section.kind}]\n${items}`;
+      return items ? `[${section.kind}]\n${items}` : '';
     })
     .filter((block) => block.trim().length > 0)
     .join('\n\n');
