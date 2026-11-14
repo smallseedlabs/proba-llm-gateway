@@ -15,6 +15,9 @@ import { MemoryActionOutcomeStore, MemoryActionPolicyStore } from '../action-pol
 import { SourcedResearchProvider } from '../testing/research.js';
 import { fakeAnalyticsPacket, FAKE_PROBA_CAMPAIGN } from '../testing/analytics.js';
 import type { ContextPacket } from '../protocol.js';
+import type { RunAnalyticsSummary } from '../ports/run-store.js';
+
+type ReviewAnalytics = RunAnalyticsSummary & { review: NonNullable<RunAnalyticsSummary['review']> };
 
 function coordinator(llm: ScriptedLlmClient, packet: ContextPacket) {
   const ads = new RecordingAdsDomain();
@@ -87,7 +90,7 @@ describe('brain campaign review (Hub-started run on the normal loop)', () => {
     const system = JSON.stringify(llm.requests[0]?.messages ?? []);
     expect(system).toContain('Approved plan');
     expect(system).toContain('Be realistic, not aggressive');
-    const analytics = snap.analytics as Record<string, any>;
+    const analytics = snap.analytics as unknown as ReviewAnalytics;
     expect(analytics.outcome).toBe('dry_run_proposal');
     expect(analytics.grantsSpend).toBe(false);
     expect(analytics.metrics[0]).toMatchObject({ clicks: 80, spend: 42.5 });
@@ -111,7 +114,7 @@ describe('brain campaign review (Hub-started run on the normal loop)', () => {
     expect(snap.status).toBe('completed');
     const firstToolReply = (llm.requests[1]?.messages ?? []).filter((m) => m.role === 'tool').at(-1);
     expect(firstToolReply?.content).toContain('review_invalid');
-    const analytics = snap.analytics as Record<string, any>;
+    const analytics = snap.analytics as unknown as ReviewAnalytics;
     expect(analytics.outcome).toBe('report');
     expect(analytics.metrics).toEqual([]);
     expect(analytics.review.checkpoint).toMatchObject({ actual: null, status: 'unknown' });
