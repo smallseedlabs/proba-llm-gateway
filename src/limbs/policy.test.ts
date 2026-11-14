@@ -162,7 +162,7 @@ describe('limb policy and domain executor', () => {
     ).toMatchObject({
       allowed: false,
       code: 'creative_missing',
-      reason: expect.stringContaining('Save the Reddit post copy for this goal in Campaigns, then approve again'),
+      reason: expect.stringContaining('Draft it with creative.draft_post'),
     });
     expect(
       policy.evaluate('ads.create_campaign', createArgs, {

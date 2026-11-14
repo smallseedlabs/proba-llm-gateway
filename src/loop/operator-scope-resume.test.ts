@@ -134,7 +134,7 @@ describe('ads.create_campaign without operator creative', () => {
     expect(JSON.parse(String(toolMessage?.content))).toMatchObject({
       ok: false,
       code: 'creative_missing',
-      message: expect.stringContaining('Save the Reddit post copy for this goal in Campaigns, then approve again'),
+      message: expect.stringContaining('Draft it with creative.draft_post'),
     });
   });
 });

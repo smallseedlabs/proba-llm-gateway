@@ -28,6 +28,18 @@ export class DomainLimbExecutor implements LimbExecutor {
     if (call.verb.limb === 'page' && call.verb.verb === 'attach_user_page') {
       return attachUserPage(call, ctx);
     }
+    if (call.verb.name === 'creative.draft_post') {
+      // Hub writes goals.approved_creative when the operator approves (or edits) the draft card; the
+      // gateway stores nothing. The saved copy reaches later calls as userSuppliedInput.creative.
+      return {
+        ok: true,
+        data: {
+          status: 'approved',
+          savedBy: 'hub',
+          note: 'The operator approved this draft (possibly with edits). Hub saved it as the goal creative; ads.create_campaign now uses the saved copy, not these arguments.',
+        },
+      };
+    }
     if (call.verb.name === 'research.gather') {
       if (!this.research) {
         return {

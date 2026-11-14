@@ -16,6 +16,7 @@ import { ConfigError } from '../errors.js';
 import { VERB_CATALOG } from '../limbs/catalog.js';
 import type { LimitsConfig } from '../types/config.js';
 import type { UsageLimits } from '../ports/usage.js';
+import { CREATIVE_LOCKS, LOCKED_BANNED_PHRASES, type CreativeRules } from '../limbs/creative-draft.js';
 
 export const VERB_MODES = ['allow', 'ask', 'deny'] as const;
 export type VerbMode = (typeof VERB_MODES)[number];
@@ -44,6 +45,15 @@ export const guardrailsFileSchema = z
       })
       .strict()
       .default({}),
+    /** creative.draft_post checks: lower length caps and EXTRA banned phrases (the code list can never be removed). */
+    creative: z
+      .object({
+        maxHeadlineChars: positiveInt.optional(),
+        maxBodyChars: positiveInt.optional(),
+        bannedPhrases: z.array(z.string().trim().min(1).max(100)).max(200).optional(),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 export type GuardrailsFile = z.infer<typeof guardrailsFileSchema>;
@@ -56,6 +66,8 @@ export interface Guardrails {
   verbs: Readonly<Record<string, VerbMode>>;
   /** Effective ceilings, only for limits the guardrails set. */
   limits: Readonly<GuardrailLimits>;
+  /** Operator creative tightening (lower caps, extra banned phrases); absent means the code locks only. */
+  creative?: Readonly<{ maxHeadlineChars?: number; maxBodyChars?: number; bannedPhrases?: readonly string[] }>;
 }
 
 export const NO_GUARDRAILS: Guardrails = Object.freeze({ version: 'none', source: 'none', verbs: Object.freeze({}), limits: Object.freeze({}) });
@@ -94,6 +106,27 @@ function checkLimits(candidate: GuardrailLimits, ceiling: (key: GuardrailLimitKe
       throw new ConfigError(`${origin}: ${key}=${value} would loosen ${against} (${max}); guardrails can only tighten`);
     }
   }
+}
+
+function checkCreative(creative: GuardrailsFile['creative'], origin: string): void {
+  if (!creative) return;
+  if (creative.maxHeadlineChars !== undefined && creative.maxHeadlineChars > CREATIVE_LOCKS.maxHeadlineChars) {
+    throw new ConfigError(`${origin}: creative.maxHeadlineChars=${creative.maxHeadlineChars} would loosen the code lock (${CREATIVE_LOCKS.maxHeadlineChars}); guardrails can only tighten`);
+  }
+  if (creative.maxBodyChars !== undefined && creative.maxBodyChars > CREATIVE_LOCKS.maxBodyChars) {
+    throw new ConfigError(`${origin}: creative.maxBodyChars=${creative.maxBodyChars} would loosen the code lock (${CREATIVE_LOCKS.maxBodyChars}); guardrails can only tighten`);
+  }
+}
+
+/** Effective creative.draft_post rules: the stricter of the code locks and the guardrails; banned phrases are additive. */
+export function creativeRulesFrom(guardrails: Guardrails): CreativeRules {
+  const c = guardrails.creative;
+  const extra = (c?.bannedPhrases ?? []).map((p) => p.toLowerCase());
+  return {
+    maxHeadlineChars: Math.min(CREATIVE_LOCKS.maxHeadlineChars, c?.maxHeadlineChars ?? CREATIVE_LOCKS.maxHeadlineChars),
+    maxBodyChars: Math.min(CREATIVE_LOCKS.maxBodyChars, c?.maxBodyChars ?? CREATIVE_LOCKS.maxBodyChars),
+    bannedPhrases: [...new Set([...LOCKED_BANNED_PHRASES, ...extra])],
+  };
 }
 
 function parseVerbPolicy(raw: string | undefined): Record<string, VerbMode> {
@@ -171,6 +204,7 @@ export function loadGuardrails(env: NodeJS.ProcessEnv, limits: LimitsConfig, opt
   const fileVerbs = file?.verbs ?? {};
   const fileLimits: GuardrailLimits = file?.limits ?? {};
   checkVerbs(fileVerbs, `guardrails file ${source}`);
+  checkCreative(file?.creative, `guardrails file ${source}`);
   checkLimits(fileLimits, (k) => lockedLimit(limits, k), `guardrails file ${source}`, 'the deployment limit GATEWAY_MAX_*');
 
   const envVerbs = parseVerbPolicy(env.GATEWAY_VERB_POLICY);
@@ -205,6 +239,7 @@ export function loadGuardrails(env: NodeJS.ProcessEnv, limits: LimitsConfig, opt
     source: [source, ...(Object.keys(envVerbs).length + Object.keys(envLim).length > 0 ? ['env'] : [])].join('+'),
     verbs: Object.freeze(verbs),
     limits: Object.freeze(effective),
+    ...(file?.creative ? { creative: Object.freeze({ ...file.creative }) } : {}),
   });
 }
 
@@ -237,6 +272,7 @@ export function allowedVerbModes(name: string): VerbMode[] {
 /** Refuse a candidate file that would loosen the code locks or the deployment GATEWAY_MAX_* limits. */
 export function assertTightenOnly(file: GuardrailsFile, limits: LimitsConfig, origin: string): void {
   checkVerbs(file.verbs ?? {}, origin);
+  checkCreative(file.creative, origin);
   checkLimits(file.limits ?? {}, (k) => lockedLimit(limits, k), origin, 'the deployment limit GATEWAY_MAX_*');
 }
 

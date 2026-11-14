@@ -308,3 +308,11 @@ Infra (hosting, Redis, ClickHouse) is **out of this formula**.
 | Analytics evaluator | `proba-llm-gateway/docs/ANALYTICS_EVALUATOR.md` |
 | Owner action policies | `proba-llm-gateway/docs/ACTION_POLICIES.md`, `src/action-policy/` |
 | Approved analytics actions, creative forwarding, E2E loop | `docs/ANALYTICS_ACTIONS.md`, `src/loop/approved-action.ts`, `src/loop/e2e-loop.test.ts` |
+
+## creative.draft_post (brain-drafted Reddit post copy)
+
+- The model drafts a Reddit TEXT post (`headline`, `body`, optional `rationale`, `claims[{text, findingId}]`). It always raises an approval card (code lock `ask`; guardrails may set `deny`, never `allow`).
+- Checks before the card: headline ≤ 300 and body ≤ 10,000 chars (code locks); a code-locked banned-phrase list (e.g. "guaranteed", "#1", "risk-free", "clinically proven"); claim-like copy (percentages, prices, multipliers, user counts, superlatives) must cite findings of the **accepted** research artifact; any URL in the copy must be on the operator-entered landing host. The landing URL attached to the draft is always Hub `userSuppliedInput.landingPageUrl`; there is no default.
+- Refusals are non-fatal tool results (`creative_invalid`, `research_not_accepted`) so the model redrafts or explains what is missing.
+- The gateway saves nothing. Hub writes `goals.approved_creative` when the operator approves the card (with optional edits); `ads.create_campaign` then uses that saved copy via `userSuppliedInput.creative`, never the draft arguments.
+- Guardrails file `creative` block (tighten-only): `maxHeadlineChars` (≤ 300), `maxBodyChars` (≤ 10,000), `bannedPhrases` (added to the code list; the code list cannot be removed). Looser values are refused at start-up.
