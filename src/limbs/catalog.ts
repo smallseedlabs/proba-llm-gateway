@@ -53,7 +53,7 @@ export const VERB_CATALOG: readonly VerbDefinition[] = [
       required: ['query'],
       properties: {
         query: { type: 'string', minLength: 2, maxLength: 300 },
-        maxResults: { type: 'integer', minimum: 1, maximum: 8 },
+        maxResults: { type: 'number', minimum: 1, maximum: 8 },
       },
     },
     risk: 'low',

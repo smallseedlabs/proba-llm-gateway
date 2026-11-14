@@ -18,6 +18,7 @@ function typeOk(expected: string | undefined, value: unknown): boolean {
   if (expected === 'object') return isRecord(value);
   if (expected === 'string') return typeof value === 'string';
   if (expected === 'number') return typeof value === 'number' && Number.isFinite(value);
+  if (expected === 'integer') return typeof value === 'number' && Number.isInteger(value);
   if (expected === 'boolean') return typeof value === 'boolean';
   if (expected === 'array') return Array.isArray(value);
   return false;
