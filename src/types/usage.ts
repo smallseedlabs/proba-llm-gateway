@@ -13,6 +13,7 @@ export const usageTotalsSchema = z
     promptTokens: z.number().nonnegative(),
     completionTokens: z.number().nonnegative(),
     cachedTokens: z.number().nonnegative(),
+    cacheMissTokens: z.number().nonnegative().default(0),
     reasoningTokens: z.number().nonnegative(),
     cost: z.union([
       z.object({ estimate: z.literal('unknown') }).strict(),
@@ -35,6 +36,7 @@ export const emptyUsageTotals = (): UsageTotals => ({
   promptTokens: 0,
   completionTokens: 0,
   cachedTokens: 0,
+  cacheMissTokens: 0,
   reasoningTokens: 0,
   cost: { estimate: 'unknown' },
 });
