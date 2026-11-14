@@ -53,7 +53,7 @@ export function runBriefText(request: HubRunRequest | undefined, facts: RunBrief
     '[run]',
     request ? `Step: ${request.stepType}.` : '',
     connected.length > 0
-      ? `Connected ad platforms in this workspace: ${connected.join(', ')}. Automatically pick the best platform mix (one or all connected platforms), budget split, targeting, and platform-tailored creatives without asking the operator to specify platforms.`
+      ? `Connected ad platforms in this workspace: ${connected.join(', ')}. When multiple platforms are connected, propose plans, creatives, and campaigns across ALL connected platforms (split the daily budget appropriately — e.g. draft creative.draft_post and propose ads.create_campaign for each connected platform, including Meta Facebook/Instagram visual-first creative and Reddit) unless the operator explicitly asks to use only one platform.`
       : '',
     url
       ? `Landing page: ${url} (operator-supplied).`
