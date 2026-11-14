@@ -21,6 +21,8 @@ export interface RunBriefFacts {
   offeredTools: readonly string[];
   /** Verbs the operator guardrails turned off. */
   deniedByGuardrails: readonly string[];
+  /** Brain campaign review facts (trigger, plan, audited metrics present, bounds); absent for other runs. */
+  review?: string;
 }
 
 /** Used only when the context packet carries no self memory (memory-api unavailable). The full self lives in proba-memory. */
@@ -51,7 +53,10 @@ export function runBriefText(request: HubRunRequest | undefined, facts: RunBrief
       : 'Landing page: none supplied. The operator sets it on the goal; research.gather and ads.create_campaign need it.',
     creativeLine(request),
     'Metrics: come from the Hub analytics review (the analytics section of your context), not from a tool you call.',
-    facts.offeredTools.length > 0
+    facts.review ? `[review]\n${facts.review}` : '',
+    facts.review && facts.offeredTools.length > 0
+      ? `Tools you can call now: ${facts.offeredTools.join(', ')}. They record your note; they never execute a change.`
+      : facts.offeredTools.length > 0
       ? `Tools you can call now: ${facts.offeredTools.join(', ')}. ${
           facts.offeredTools.includes('research.gather') ? 'Every one except research.gather' : 'Each one'
         } raises an approval card for the operator.`

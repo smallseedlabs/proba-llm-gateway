@@ -13,6 +13,7 @@ import type { AnalyticsDecisionStore } from '../analytics/store.js';
 import type { ActionOutcomeStore, ActionPolicyStore } from '../action-policy/store.js';
 import { campaignIdOf, evaluateActionPolicy } from '../action-policy/evaluate.js';
 import { runAnalyticsReview } from './analytics-review.js';
+import { brainReviewBrief, finishBrainReview, handleReviewCall, isBrainReview, isReviewVerb, prepareBrainReview } from './brain-review.js';
 import { approvedActionFromRequest, runApprovedAction } from './approved-action.js';
 import { verbByName } from '../limbs/catalog.js';
 import { applyResearchResume, isResearchAcceptPending } from '../research/acceptance.js';
@@ -95,7 +96,8 @@ export async function runBoundedLoop(
     if (record.pendingApproval && record.state === 'awaiting_approval' && record.snapshot) return record.snapshot;
   }
 
-  if (request.stepType === 'review_performance') {
+  const brainReview = isBrainReview(request);
+  if (request.stepType === 'review_performance' && !brainReview) {
     return runAnalyticsReview(deps, record, request, cancellation, usage);
   }
 
@@ -162,10 +164,14 @@ export async function runBoundedLoop(
     const guardrails = deps.config.guardrails ?? NO_GUARDRAILS;
     const limbFilter = offeredToolFilter(preflight.offeredLimbs);
     // Operator guardrails can only remove verbs: a denied verb is not offered (and is refused if called anyway).
-    const toolFilter = (name: string) => limbFilter(name) && verbMode(guardrails, name) !== 'deny';
+    // A brain campaign review is offered ONLY the reviewer verbs (notes; nothing executes). Other runs never see them.
+    const reviewFacts = brainReview ? prepareBrainReview(record, request, packet, guardrails, deps.clock.now()) : undefined;
+    const toolFilter = (name: string) =>
+      (brainReview ? isReviewVerb(name) : limbFilter(name) && !isReviewVerb(name)) && verbMode(guardrails, name) !== 'deny';
     const brief: RunBriefFacts = {
       offeredTools: offeredTools(toolFilter).map((t) => t.name),
       deniedByGuardrails: Object.entries(guardrails.verbs).filter(([, mode]) => mode === 'deny').map(([name]) => name),
+      ...(reviewFacts ? { review: brainReviewBrief(request, reviewFacts) } : {}),
     };
     record.messages =
       record.messages.length === 0 ? initialMessages(packet, request, brief) : refreshSystem(record.messages, packet, request, brief);
@@ -185,6 +191,7 @@ export async function runBoundedLoop(
       continue;
     }
     const text = turn.message.content ?? '';
+    if (brainReview) return finishBrainReview(deps, record, request, text);
     return finish(deps, record, 'completed', [{ type: 'reply', text }]);
   }
   throw new BudgetExhaustedError(`iteration cap ${deps.config.limits.maxIterations} reached`);
@@ -353,6 +360,17 @@ async function dispatchTools(
       record.messages.push({
         role: 'tool',
         content: JSON.stringify({ ok: false, code: 'invalid_args', message: 'tool arguments are not a JSON object' }),
+        toolCallId: call.id,
+      });
+      continue;
+    }
+    if (isReviewVerb(call.name)) {
+      const denied = verbMode(deps.config.guardrails ?? NO_GUARDRAILS, call.name) === 'deny';
+      record.messages.push({
+        role: 'tool',
+        content: denied
+          ? JSON.stringify({ ok: false, code: 'guardrail', message: `${call.name} is turned off by the operator's guardrails.` })
+          : handleReviewCall(deps, record, request, call, args),
         toolCallId: call.id,
       });
       continue;
