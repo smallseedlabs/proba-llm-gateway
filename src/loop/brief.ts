@@ -35,8 +35,9 @@ function creativeLine(request: HubRunRequest | undefined): string {
     return `Post copy: operator-approved copy is saved on the goal${type}.`;
   }
   return (
-    'Post copy: none saved yet. It comes from the operator in the web app under Campaigns > Reddit post form ' +
-    '(stored on the goal as goals.approved_creative). ads.create_campaign is blocked until it exists; you do not write ad copy.'
+    'Post copy: none saved yet. Draft it with creative.draft_post from the goal, the operator page and the accepted research; ' +
+    'the operator approves or edits the draft card, which saves it on the goal (goals.approved_creative). The operator may instead save ' +
+    'their own copy in the web app under Campaigns > Reddit post form. ads.create_campaign is blocked until approved copy exists.'
   );
 }
 

@@ -89,6 +89,38 @@ export const VERB_CATALOG: readonly VerbDefinition[] = [
     allowlisted: false,
   }),
   verb({
+    limb: 'creative',
+    verb: 'draft_post',
+    name: 'creative.draft_post',
+    description:
+      'Draft the Reddit TEXT post (headline + body) for this goal from the goal, the operator page and the ACCEPTED research. The operator sees it as an approval card and may edit it; only their approval saves it as the goal creative, after which ads.create_campaign can run. Use this when no creative is saved yet. Write for Reddit: plain, specific, no hype. Any factual claim (numbers, prices, superlatives) must be listed in claims with the accepted research findingId it comes from. Never include URLs other than the operator landing page; never invent a landing page.',
+    parameters: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['headline', 'body'],
+      properties: {
+        headline: { type: 'string', minLength: 1, maxLength: 300 },
+        body: { type: 'string', minLength: 1, maxLength: 10000 },
+        rationale: { type: 'string', maxLength: 1000, description: 'Why this angle fits the goal and audience (shown to the operator).' },
+        claims: {
+          type: 'array',
+          maxItems: 10,
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['text', 'findingId'],
+            properties: { text: { type: 'string', maxLength: 300 }, findingId: { type: 'string', maxLength: 128 } },
+          },
+        },
+        landingPageUrl: { type: 'string', minLength: 1, maxLength: 2048 },
+      },
+    },
+    risk: 'medium',
+    sideEffecting: false,
+    requiresApproval: true,
+    allowlisted: true,
+  }),
+  verb({
     limb: 'ads',
     verb: 'create_campaign',
     name: 'ads.create_campaign',

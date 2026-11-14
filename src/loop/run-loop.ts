@@ -45,7 +45,7 @@ import type { RunUsageLedger } from '../usage/reservations.js';
 import type { Cancellation } from '../ports/cancellation.js';
 import { initialMessages, offeredTools, parseToolArguments, refreshSystem, runBudgetMessage } from './messages.js';
 import type { RunBriefFacts } from './brief.js';
-import { NO_GUARDRAILS, verbMode } from '../guardrails/guardrails.js';
+import { creativeRulesFrom, NO_GUARDRAILS, verbMode } from '../guardrails/guardrails.js';
 import { gatewayAuditEvent, llmTurnAuditEvents } from './audit-events.js';
 import { RequestValidationError } from '../errors.js';
 
@@ -363,6 +363,12 @@ async function dispatchTools(
       goalId: request.goalId,
       threadId: request.threadId,
       userSuppliedInput: request.userSuppliedInput,
+      ...(call.name === 'creative.draft_post'
+        ? {
+            acceptedResearch: await acceptedResearchFor(deps, request),
+            creativeRules: creativeRulesFrom(deps.config.guardrails ?? NO_GUARDRAILS),
+          }
+        : {}),
     });
     if (!decision.allowed) {
       record.events.push(
@@ -380,7 +386,14 @@ async function dispatchTools(
       });
       // Refused, but not fatal: the model is told what is missing (operator copy) and can tell the
       // operator what to do. The create itself never runs without creative.
-      if (decision.code === 'unknown_verb' || decision.code === 'allowlist' || decision.code === 'creative_missing') continue;
+      if (
+        decision.code === 'unknown_verb' ||
+        decision.code === 'allowlist' ||
+        decision.code === 'creative_missing' ||
+        decision.code === 'creative_invalid' ||
+        decision.code === 'research_not_accepted'
+      )
+        continue;
       throw new PolicyDeniedError(decision.reason);
     }
 
@@ -675,6 +688,22 @@ async function dispatchTools(
       throw err;
     }
   }
+}
+
+/** Accepted research for the operator URL on this goal/thread, for creative.draft_post claim checks. */
+async function acceptedResearchFor(
+  deps: Pick<LoopBodyDeps, 'researchStore'>,
+  request: HubRunRequest
+): Promise<{ artifactId: string; version: number; findingIds: string[] } | undefined> {
+  const landingPageUrl = readUserSuppliedLanding(request.userSuppliedInput);
+  if (!landingPageUrl || !request.goalId || !request.threadId) return undefined;
+  const artifact = await lookupCurrentArtifact(
+    deps.researchStore,
+    { workspaceId: request.workspaceId, userId: request.userId, goalId: request.goalId, threadId: request.threadId },
+    landingPageUrl
+  );
+  if (!artifact || artifact.status !== 'accepted' || !artifact.acceptedAt || artifact.landingPageUrl !== landingPageUrl) return undefined;
+  return { artifactId: artifact.artifactId, version: artifact.version, findingIds: artifact.findings.map((f) => f.id) };
 }
 
 async function blockedSnapshot(
