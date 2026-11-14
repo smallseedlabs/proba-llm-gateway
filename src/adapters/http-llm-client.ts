@@ -131,6 +131,7 @@ export class HttpLlmClient implements LlmClient {
       const body = (await response.json().catch(() => undefined)) as {
         promptUsdPerMillion?: unknown;
         completionUsdPerMillion?: unknown;
+        promptCacheHitUsdPerMillion?: unknown;
         version?: unknown;
       } | undefined;
       const prompt = body?.promptUsdPerMillion;
@@ -139,7 +140,14 @@ export class HttpLlmClient implements LlmClient {
       if (typeof prompt !== 'number' || !(prompt > 0) || typeof completion !== 'number' || !(completion > 0) || typeof version !== 'string' || version.trim() === '') {
         return { kind: 'unknown', reason: 'proba-llm pricing body did not include authoritative positive unit rates' };
       }
-      return { kind: 'verified', promptUsdPerMillion: prompt, completionUsdPerMillion: completion, version };
+      const hit = body?.promptCacheHitUsdPerMillion;
+      return {
+        kind: 'verified',
+        promptUsdPerMillion: prompt,
+        completionUsdPerMillion: completion,
+        version,
+        ...(typeof hit === 'number' && Number.isFinite(hit) && hit >= 0 ? { promptCacheHitUsdPerMillion: hit } : {}),
+      };
     } catch (err) {
       return { kind: 'unavailable', reason: err instanceof Error ? err.message : 'proba-llm pricing unreachable' };
     }

@@ -141,4 +141,40 @@ describe('usage reservations', () => {
     expect(() => ledger.assertCanCallLlm()).toThrow(BudgetExhaustedError);
     expect(() => ledger.assertCanCallLlm()).toThrow(/unknown/);
   });
+
+  it('accumulates cacheMissTokens from each turn and treats a missing field as zero', () => {
+    const ledger = new RunUsageLedger(limits());
+    ledger.recordLlmTurn({
+      ...turn({ estimate: 0.001, currency: 'USD', pricingVersion: 'test-v1' }, 1000, 50),
+      usage: { promptTokens: 1000, completionTokens: 50, cachedTokens: 800, cacheMissTokens: 200 },
+    });
+    ledger.recordLlmTurn({
+      ...turn({ estimate: 0.002, currency: 'USD', pricingVersion: 'test-v1' }, 10, 2),
+      usage: { promptTokens: 10, completionTokens: 2, cachedTokens: 8 },
+    });
+    const snap = ledger.snapshot();
+    expect(snap.cachedTokens).toBe(808);
+    expect(snap.cacheMissTokens).toBe(200);
+    expect(snap.promptTokens).toBe(1010);
+  });
+
+  it('does not shrink the next-call USD bound when a cache-hit rate is present', () => {
+    const tight = limits({ maxTotalTokens: 1000, responseTokenReserve: 0 });
+    const empty = new RunUsageLedger(tight).snapshot();
+    const withHit = conservativeNextCallCostUsd(
+      tight,
+      empty,
+      verifiedPricing({ promptUsdPerMillion: 0.3, completionUsdPerMillion: 1.2, promptCacheHitUsdPerMillion: 0.006 })
+    );
+    const withoutHit = conservativeNextCallCostUsd(
+      tight,
+      empty,
+      verifiedPricing({ promptUsdPerMillion: 0.3, completionUsdPerMillion: 1.2 })
+    );
+    expect(withHit.kind).toBe('numeric');
+    expect(withoutHit.kind).toBe('numeric');
+    if (withHit.kind === 'numeric' && withoutHit.kind === 'numeric') {
+      expect(withHit.amount).toBe(withoutHit.amount);
+    }
+  });
 });

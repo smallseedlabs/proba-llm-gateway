@@ -106,6 +106,7 @@ export const turnResponseSchema = z
         promptTokens: z.number().nonnegative().optional(),
         completionTokens: z.number().nonnegative().optional(),
         cachedTokens: z.number().nonnegative().optional(),
+        cacheMissTokens: z.number().nonnegative().optional(),
         reasoningTokens: z.number().nonnegative().optional(),
       })
       .strict(),
