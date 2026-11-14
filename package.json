@@ -27,6 +27,7 @@
   "author": "Small Seed Labs",
   "license": "Apache-2.0",
   "dependencies": {
+    "@fastify/rate-limit": "^11.2.2",
     "@smallseedlabs/proba-protocol": "github:smallseedlabs/proba-protocol#v0.6.0",
     "fastify": "^5.12.8",
     "jose": "^5.10.0",

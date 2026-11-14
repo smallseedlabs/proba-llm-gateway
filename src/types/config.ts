@@ -10,6 +10,20 @@ export interface ListenConfig {
   port: number;
 }
 
+export interface AdminConfig {
+  /**
+   * Firebase project ID used to verify operator ID tokens for /v1/admin/*.
+   * Empty: the admin routes answer 503 (not configured). Hub run traffic is unchanged.
+   */
+  firebaseProjectId: string;
+  /** Lower-case emails that may call the admin routes. Empty: nobody. */
+  adminEmails: readonly string[];
+  /** Browser origins allowed to call the admin routes (the Portal). Empty: no CORS. */
+  corsOrigins: readonly string[];
+  /** Workspace id written on admin audit events. */
+  workspaceId: string;
+}
+
 export interface AuthConfig {
   /** JWKS of Hub's gateway-caller service keys (public only). */
   hubPublicKeyFile: string;
@@ -157,6 +171,9 @@ export interface GatewayServiceConfig {
   limits: LimitsConfig;
   /** Operator guardrails (file + env) that only tighten verbs and limits. Absent = none. */
   guardrails?: Guardrails;
+  /** Explicit GATEWAY_GUARDRAILS_FILE path, when set. Required for Portal writes. */
+  guardrailsFile?: string;
+  admin: AdminConfig;
   audit: AuditConfig;
   runStoreDir: string;
 }

@@ -244,6 +244,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayService
       maxStreamLength: envInt(env, 'AUDIT_MAX_STREAM_LENGTH', 100_000, 0, 10_000_000),
     },
     runStoreDir,
+    admin: {
+      firebaseProjectId: (env.FIREBASE_PROJECT_ID ?? '').trim(),
+      adminEmails: envList(env, 'GATEWAY_ADMIN_EMAILS', []).map((e) => e.toLowerCase()),
+      corsOrigins: envList(env, 'GATEWAY_CORS_ORIGINS', []),
+      workspaceId: (env.GATEWAY_ADMIN_WORKSPACE_ID ?? 'seedbed').trim() || 'seedbed',
+    },
+    guardrailsFile: (env.GATEWAY_GUARDRAILS_FILE ?? '').trim() || undefined,
   };
   return { ...config, guardrails: loadGuardrails(env, config.limits) };
 }

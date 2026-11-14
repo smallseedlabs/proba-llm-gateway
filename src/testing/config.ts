@@ -58,6 +58,12 @@ export function testConfig(overrides: Partial<GatewayServiceConfig> = {}): Gatew
       storeDir: '',
       outcomeStoreDir: '',
     },
+    admin: {
+      firebaseProjectId: '',
+      adminEmails: [],
+      corsOrigins: [],
+      workspaceId: 'seedbed',
+    },
     limits: {
       maxRequestBytes: 262_144,
       rateLimitMax: 60,
