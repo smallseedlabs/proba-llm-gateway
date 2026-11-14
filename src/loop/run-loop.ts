@@ -105,6 +105,12 @@ export async function runBoundedLoop(
   }
 
   const hardCap = Math.max(1, deps.config.limits.maxIterations) + 1;
+  // The context packet is built once per Hub request and reused on every loop. The act-as
+  // assertion Hub forwards is single-use at context-api (jti replay protection), so a second
+  // build in the same request would be refused with 401. Anything new between loops reaches
+  // the model as tool results in the transcript, not through a context rebuild.
+  let packet: ContextPacket | undefined;
+  let contextLoaded = false;
   for (let n = 0; n < hardCap; n += 1) {
     cancellation.throwIfAborted();
     const preflight = await runPreflight(
@@ -133,21 +139,23 @@ export async function runBoundedLoop(
       return blockedSnapshot(deps, record, preflight.needs);
     }
 
-    let packet: ContextPacket | undefined;
-    try {
-      packet = await loadContext(deps, record, request, cancellation, usage);
-    } catch (err) {
-      if (err instanceof ContextClientError || err instanceof RequestValidationError) {
-        return blockedSnapshot(deps, record, [
-          {
-            type: 'capability',
-            capability: 'context.ready',
-            state: err instanceof ContextClientError && err.code === 'timeout' ? 'unavailable' : 'unavailable',
-            message: err.message,
-          },
-        ]);
+    if (!contextLoaded) {
+      try {
+        packet = await loadContext(deps, record, request, cancellation, usage);
+        contextLoaded = true;
+      } catch (err) {
+        if (err instanceof ContextClientError || err instanceof RequestValidationError) {
+          return blockedSnapshot(deps, record, [
+            {
+              type: 'capability',
+              capability: 'context.ready',
+              state: err instanceof ContextClientError && err.code === 'timeout' ? 'unavailable' : 'unavailable',
+              message: err.message,
+            },
+          ]);
+        }
+        throw err;
       }
-      throw err;
     }
     const iteration = usage.recordIteration();
     record.iteration = iteration;

@@ -108,6 +108,8 @@ export const llmPricingClaimSchema = z.discriminatedUnion('kind', [
       promptUsdPerMillion: z.number().positive(),
       completionUsdPerMillion: z.number().positive(),
       version: z.string().min(1),
+      /** Optional cache-hit input rate from proba-llm. Absence keeps the conservative all-miss bound. */
+      promptCacheHitUsdPerMillion: z.number().nonnegative().optional(),
     })
     .strict(),
   z.object({ kind: z.literal('unknown'), reason: z.string().min(1) }).strict(),

@@ -271,6 +271,7 @@ export class RunUsageLedger implements UsageLedger {
       promptTokens: this.totals.promptTokens + (response.usage.promptTokens ?? 0),
       completionTokens: this.totals.completionTokens + (response.usage.completionTokens ?? 0),
       cachedTokens: this.totals.cachedTokens + (response.usage.cachedTokens ?? 0),
+      cacheMissTokens: this.totals.cacheMissTokens + (response.usage.cacheMissTokens ?? 0),
       reasoningTokens: this.totals.reasoningTokens + (response.usage.reasoningTokens ?? 0),
       cost,
     };
