@@ -50,7 +50,9 @@ function stringList(v: unknown, max: number, item: (s: string) => string | undef
   const out: string[] = [];
   for (const raw of v) {
     if (typeof raw !== 'string') return `${label} must contain text`;
-    const s = item(raw.trim());
+    const trimmed = raw.trim();
+    const s = item(trimmed);
+    if (s === '__ignore__') continue;
     if (!s) return `${label} has an invalid entry "${String(raw).slice(0, 40)}"`;
     if (!out.includes(s)) out.push(s);
   }
@@ -72,7 +74,12 @@ export function checkTargeting(raw: unknown, rules: PlanRules = DEFAULT_PLAN_RUL
     ['geolocations', PLAN_LOCKS.maxGeolocations, (s) => (/^[A-Za-z0-9_-]{2,64}$/.test(s) ? s.toUpperCase() : undefined)],
     ['interests', PLAN_LOCKS.maxInterests, (s) => (s.length >= 1 && s.length <= 128 ? s : undefined)],
     ['keywords', PLAN_LOCKS.maxKeywords, (s) => (s.length >= 1 && s.length <= 128 ? s : undefined)],
-    ['platforms', REDDIT_PLATFORMS.length, (s) => ((REDDIT_PLATFORMS as readonly string[]).includes(s.toUpperCase()) ? s.toUpperCase() : undefined)],
+    ['platforms', 8, (s) => {
+      const upper = s.toUpperCase();
+      if ((REDDIT_PLATFORMS as readonly string[]).includes(upper)) return upper;
+      if (['REDDIT', 'META', 'FACEBOOK', 'INSTAGRAM', 'GOOGLE', 'MICROSOFT'].includes(upper)) return '__ignore__';
+      return undefined;
+    }],
     ['languages', REDDIT_LANGUAGES.length, (s) => ((REDDIT_LANGUAGES as readonly string[]).includes(s.toUpperCase()) ? s.toUpperCase() : undefined)],
   ];
   const out: CheckedTargeting = {};

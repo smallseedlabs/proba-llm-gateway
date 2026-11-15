@@ -114,8 +114,10 @@ export class DomainLimbExecutor implements LimbExecutor {
         };
       }
       if (source === 'ai' && this.research?.store) {
-        const accepted = await this.acceptedResearch(call, ctx);
-        if (!accepted.ok) return accepted;
+        const artifact = await lookupCurrentArtifact(this.research.store, bindingFromCtx(ctx), undefined);
+        if (!artifact || artifact.status !== 'accepted' || !artifact.acceptedAt) {
+          return { ok: false, code: 'research_not_accepted', message: 'research artifact must be accepted before generating AI media' };
+        }
       }
 
       const outcome = await generateCreativeMedia({
