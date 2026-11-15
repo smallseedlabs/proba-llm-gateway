@@ -79,6 +79,11 @@ export class CatalogPolicyEngine implements PolicyEngine {
         candidateArgs = { ...rawArgs, maxResults: Number(trimmed) };
       }
     }
+    if (verb.name === 'creative.draft_post' && isRecord(candidateArgs) && typeof candidateArgs.platform === 'string') {
+      const { platform, ...rest } = candidateArgs;
+      const plan = isRecord(rest.plan) && rest.plan.platform === undefined ? { ...rest.plan, platform } : rest.plan;
+      candidateArgs = { ...rest, ...(plan !== undefined ? { plan } : {}) };
+    }
     const schemaIssue = argumentsMatchSchema(verb.parameters, candidateArgs);
     if (schemaIssue) return { allowed: false, code: 'schema', reason: schemaIssue };
     if (!isRecord(candidateArgs)) return { allowed: false, code: 'schema', reason: 'arguments must be an object' };

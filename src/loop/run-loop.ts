@@ -416,6 +416,7 @@ async function dispatchTools(
       if (
         decision.code === 'unknown_verb' ||
         decision.code === 'allowlist' ||
+        decision.code === 'schema' ||
         decision.code === 'creative_missing' ||
         decision.code === 'creative_invalid' ||
         decision.code === 'research_not_accepted'
