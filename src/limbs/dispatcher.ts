@@ -18,6 +18,7 @@ import type { ResearchArtifact } from '../types/research.js';
 
 export class DomainLimbExecutor implements LimbExecutor {
   readonly name = 'domain';
+  private readonly aiMediaByRun = new Map<string, number>();
 
   constructor(
     private readonly ads: AdsDomainPort,
@@ -102,12 +103,28 @@ export class DomainLimbExecutor implements LimbExecutor {
         }
       }
 
+      const source = typeof call.args.source === 'string' ? (call.args.source as MediaSource) : 'auto';
+      const runKey = ctx.traceId;
+      const aiCount = this.aiMediaByRun.get(runKey) ?? 0;
+      if (source === 'ai' && aiCount >= 1) {
+        return {
+          ok: false,
+          code: 'ai_media_cap',
+          message: 'Per-run AI generation cap reached (1 fal.ai asset per run). Reuse an existing Studio asset or free stock.',
+        };
+      }
+      if (source === 'ai' && this.research?.store) {
+        const accepted = await this.acceptedResearch(call, ctx);
+        if (!accepted.ok) return accepted;
+      }
+
       const outcome = await generateCreativeMedia({
         kind,
         prompt,
+        ...(typeof call.args.searchQuery === 'string' ? { searchQuery: call.args.searchQuery } : {}),
         ...(aspectRatio ? { aspectRatio } : {}),
         ...(typeof call.args.quality === 'string' ? { quality: call.args.quality as MediaQuality } : {}),
-        ...(typeof call.args.source === 'string' ? { source: call.args.source as MediaSource } : {}),
+        source,
         ...(typeof call.args.sourceImageUrl === 'string' ? { sourceImageUrl: call.args.sourceImageUrl } : {}),
         ...(call.args.durationSeconds === 5 || call.args.durationSeconds === 10
           ? { durationSeconds: call.args.durationSeconds }
@@ -115,6 +132,9 @@ export class DomainLimbExecutor implements LimbExecutor {
       });
       if (!outcome.ok) {
         return { ok: false, code: outcome.code, message: outcome.message };
+      }
+      if (outcome.asset.provider === 'fal') {
+        this.aiMediaByRun.set(runKey, aiCount + 1);
       }
       const strArr = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : undefined);
       const saved = await saveHubAsset({

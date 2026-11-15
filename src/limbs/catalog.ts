@@ -187,7 +187,18 @@ export const VERB_CATALOG: readonly VerbDefinition[] = [
           description: '4:5 for Meta Feed (preferred), 9:16 for Reels/Stories, 1:1 square, 16:9 landscape.',
         },
         quality: { type: 'string', enum: ['fast', 'high'], description: 'fast (economical default) or high (studio quality).' },
-        source: { type: 'string', enum: ['auto', 'ai', 'stock'], description: 'auto prefers AI if configured, otherwise stock.' },
+        source: {
+          type: 'string',
+          enum: ['auto', 'ai', 'stock'],
+          description:
+            'auto tries free stock (Pexels) first if configured, then fal.ai. Use stock to inspect free internet media first; use ai only for out-of-the-box bespoke concepts when brand/stock assets are insufficient.',
+        },
+        searchQuery: {
+          type: 'string',
+          minLength: 2,
+          maxLength: 100,
+          description: 'Short 2-5 keyword query when searching free stock (e.g. "enterprise team collaboration").',
+        },
         sourceImageUrl: {
           type: 'string',
           minLength: 1,

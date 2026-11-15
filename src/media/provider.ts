@@ -9,6 +9,7 @@ export type MediaSource = 'auto' | 'ai' | 'stock';
 export interface MediaGenerateInput {
   kind: MediaKind;
   prompt: string;
+  searchQuery?: string;
   aspectRatio?: MediaAspectRatio;
   quality?: MediaQuality;
   source?: MediaSource;
@@ -223,7 +224,8 @@ async function fetchFromPexels(
 ): Promise<MediaGenerateOutcome> {
   const aspectRatio = input.aspectRatio ?? (input.kind === 'video' ? '9:16' : '1:1');
   const orientation = pexelsOrientation(aspectRatio);
-  const query = encodeURIComponent(input.prompt.slice(0, 120));
+  const queryText = (input.searchQuery?.trim() || input.prompt).slice(0, 120);
+  const query = encodeURIComponent(queryText);
 
   if (input.kind === 'image') {
     const res = await fetchImpl(`https://api.pexels.com/v1/search?query=${query}&orientation=${orientation}&per_page=3`, {
@@ -325,11 +327,16 @@ export async function generateCreativeMedia(
     return fetchFromPexels({ ...input, prompt }, cfg.pexelsApiKey, fetchImpl);
   }
 
+  // Stock-first waterfall in 'auto': try free stock (Pexels) before spending fal.ai credits,
+  // except for image-to-video animation which requires fal.ai.
+  if (cfg.pexelsApiKey && !input.sourceImageUrl) {
+    const stockOutcome = await fetchFromPexels({ ...input, prompt }, cfg.pexelsApiKey, fetchImpl);
+    if (stockOutcome.ok || !cfg.falKey) {
+      return stockOutcome;
+    }
+  }
   if (cfg.falKey) {
     return generateWithFal({ ...input, prompt }, cfg.falKey, fetchImpl, timeoutMs);
-  }
-  if (cfg.pexelsApiKey) {
-    return fetchFromPexels({ ...input, prompt }, cfg.pexelsApiKey, fetchImpl);
   }
   return {
     ok: false,
