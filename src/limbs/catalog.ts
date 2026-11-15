@@ -508,6 +508,44 @@ export const VERB_CATALOG: readonly VerbDefinition[] = [
     requiresApproval: false,
     allowlisted: true,
   }),
+  verb({
+    limb: 'geo',
+    verb: 'brand_audit',
+    name: 'geo.brand_audit',
+    description:
+      'Audit how visible the brand is across AI answer engines (ChatGPT, Gemini, Claude, Perplexity) using buyer-intent prompts you generate from the Goal and research. Returns overall Visibility Score, engine breakdown, cited URLs (e.g. Reddit threads), a Document of Information (crawlability, llms.txt, FAQ JSON-LD, comparison briefs, organic threads), and Decision Proposals (e.g. Reddit campaign).',
+    parameters: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['brandName', 'domain', 'prompts'],
+      properties: {
+        brandName: { type: 'string', minLength: 1, maxLength: 120 },
+        domain: { type: 'string', minLength: 3, maxLength: 256 },
+        competitors: {
+          type: 'array',
+          maxItems: 8,
+          items: { type: 'string', minLength: 1, maxLength: 120 },
+          description: 'Up to 8 competitor brands to compare share-of-AI-voice against.',
+        },
+        prompts: {
+          type: 'array',
+          minItems: 1,
+          maxItems: 15,
+          items: { type: 'string', minLength: 3, maxLength: 300 },
+          description: 'Buyer-intent prompts (e.g. "best X for Y", "Brand vs Competitor") to test across AI engines.',
+        },
+        engines: {
+          type: 'array',
+          maxItems: 4,
+          items: { type: 'string', enum: ['chatgpt', 'gemini', 'claude', 'perplexity'] },
+        },
+      },
+    },
+    risk: 'low',
+    sideEffecting: false,
+    requiresApproval: false,
+    allowlisted: true,
+  }),
 ];
 
 export function verbByName(name: string): VerbDefinition | undefined {

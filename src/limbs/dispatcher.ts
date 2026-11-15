@@ -66,6 +66,51 @@ export class DomainLimbExecutor implements LimbExecutor {
       const maxResults = typeof call.args.maxResults === 'number' ? call.args.maxResults : 5;
       return executeWebSearch(query, maxResults);
     }
+    if (call.verb.name === 'geo.brand_audit') {
+      const geoUrl = (process.env.GEO_SERVICE_URL ?? '').trim().replace(/\/+$/, '');
+      if (!geoUrl) {
+        return {
+          ok: false,
+          code: 'geo_unconfigured',
+          message: 'GEO service is not configured (GEO_SERVICE_URL missing)',
+        };
+      }
+      const brandName = typeof call.args.brandName === 'string' ? call.args.brandName.trim() : '';
+      const domain = typeof call.args.domain === 'string' ? call.args.domain.trim() : '';
+      const prompts = Array.isArray(call.args.prompts)
+        ? call.args.prompts.filter((p): p is string => typeof p === 'string' && p.trim().length > 0)
+        : [];
+      const competitors = Array.isArray(call.args.competitors)
+        ? call.args.competitors.filter((c): c is string => typeof c === 'string' && c.trim().length > 0)
+        : [];
+      const engines = Array.isArray(call.args.engines)
+        ? call.args.engines.filter((e): e is string => typeof e === 'string')
+        : undefined;
+      try {
+        const res = await fetch(`${geoUrl}/v1/geo/audit`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            workspaceId: ctx.workspaceId,
+            goalId: ctx.goalId,
+            brandName,
+            domain,
+            competitors,
+            prompts,
+            ...(engines && engines.length > 0 ? { engines } : {}),
+          }),
+          signal: AbortSignal.timeout(45_000),
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          return { ok: false, code: 'geo_failed', message: `geo-domain returned HTTP ${res.status}: ${text.slice(0, 200)}` };
+        }
+        const data = (await res.json()) as Record<string, unknown>;
+        return { ok: true, data };
+      } catch (err) {
+        return { ok: false, code: 'geo_failed', message: `geo-domain request failed: ${(err as Error).message}` };
+      }
+    }
     if (call.verb.name === 'creative.list_assets') {
       const listed = await listHubAssets({
         workspaceId: ctx.workspaceId,
