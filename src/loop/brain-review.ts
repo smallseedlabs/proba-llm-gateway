@@ -139,7 +139,7 @@ export function handleReviewCall(
 
 /** Close a brain review: snapshot.analytics carries the metrics, the note and any dry-run change for Hub. */
 export async function finishBrainReview(
-  deps: Pick<LoopBodyDeps, 'clock' | 'persist' | 'relay'>,
+  deps: Pick<LoopBodyDeps, 'clock' | 'persist' | 'relay' | 'analyticsStore' | 'config'>,
   record: RunRecord,
   request: HubRunRequest,
   text: string
@@ -151,9 +151,33 @@ export async function finishBrainReview(
   const asOf = snapshots.map((s) => s.asOf).sort().at(-1) ?? null;
   const scope = analyticsScopeFromRequest(request);
   const probaCampaignId = note?.probaCampaignId ?? scope.probaCampaignId;
+  const outcome = note?.proposal ? 'dry_run_proposal' : 'report';
+  if (probaCampaignId && deps.analyticsStore) {
+    const now = deps.clock.now();
+    const minUntil = now.getTime() + deps.config.analytics.cooldownMs;
+    const noteUntil = note?.nextCheckAt ? Date.parse(note.nextCheckAt) : NaN;
+    const cooldownUntil = new Date(Number.isFinite(noteUntil) ? Math.max(noteUntil, minUntil) : minUntil).toISOString();
+    const version = asOf ?? now.toISOString();
+    await deps.analyticsStore.put({
+      workspaceId: request.workspaceId,
+      userId: request.userId,
+      probaCampaignId,
+      goalId: scope.goalId,
+      decisionId,
+      outcome,
+      asOf: version,
+      campaignDecisionVersion: version,
+      cooldownUntil,
+      idempotencyKey: record.idempotencyKey,
+      ...(note?.proposal?.argsHash ? { argsHash: note.proposal.argsHash } : {}),
+      occurredAt: now.toISOString(),
+      ...(scope.platform ?? snapshots[0]?.platform ? { platform: scope.platform ?? snapshots[0]?.platform } : {}),
+      ...(scope.accountId ?? snapshots[0]?.accountId ? { accountId: scope.accountId ?? snapshots[0]?.accountId } : {}),
+    });
+  }
   record.analytics = {
     decisionId,
-    outcome: note?.proposal ? 'dry_run_proposal' : 'report',
+    outcome,
     grantsSpend: false,
     asOf,
     ...(probaCampaignId ? { probaCampaignId } : {}),
