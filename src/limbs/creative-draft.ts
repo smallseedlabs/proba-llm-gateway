@@ -259,7 +259,7 @@ export function checkCreativeDraft(raw: Record<string, unknown>, input: DraftChe
   if (!plan.ok) return { ok: false, code: 'creative_invalid', reason: plan.reason };
   if (
     plan.plan?.platform === 'reddit' &&
-    /^\s*(?:chose|chosen|selected|picked|using)\s+meta\b/i.test(plan.plan.reasons.platform ?? '')
+    /^\s*(?:(?:chose|chosen|selected|picked|using)\s+)?meta\b/i.test(plan.plan.reasons.platform ?? '')
   ) {
     return {
       ok: false,
