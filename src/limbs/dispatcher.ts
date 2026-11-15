@@ -12,6 +12,7 @@ import { researchAcceptedNeed } from '../research/artifact.js';
 import { bindingFromCtx, executeGather, lookupCurrentArtifact, type ResearchRuntime } from '../research/gather.js';
 import { normalizeLandingPageUrl } from '../research/input.js';
 import { executeWebSearch } from '../research/web-search.js';
+import { listHubAssets, saveHubAsset } from '../media/asset-store.js';
 import { generateCreativeMedia, type MediaAspectRatio, type MediaKind, type MediaQuality, type MediaSource } from '../media/provider.js';
 import type { ResearchArtifact } from '../types/research.js';
 
@@ -64,11 +65,47 @@ export class DomainLimbExecutor implements LimbExecutor {
       const maxResults = typeof call.args.maxResults === 'number' ? call.args.maxResults : 5;
       return executeWebSearch(query, maxResults);
     }
+    if (call.verb.name === 'creative.list_assets') {
+      const listed = await listHubAssets({
+        workspaceId: ctx.workspaceId,
+        userId: ctx.userId,
+        ...(typeof call.args.kind === 'string' ? { kind: call.args.kind as MediaKind } : {}),
+        ...(typeof call.args.query === 'string' ? { query: call.args.query } : {}),
+        ...(typeof call.args.tag === 'string' ? { tag: call.args.tag } : {}),
+        ...(typeof call.args.useCase === 'string' ? { useCase: call.args.useCase } : {}),
+        ...(typeof call.args.limit === 'number' ? { limit: call.args.limit } : {}),
+      });
+      if (!listed.ok) {
+        return { ok: false, code: listed.code, message: listed.message };
+      }
+      return { ok: true, data: { assets: listed.assets, count: listed.assets.length } };
+    }
     if (call.verb.name === 'creative.generate_media') {
+      const kind = (call.args.kind === 'video' ? 'video' : 'image') as MediaKind;
+      const prompt = typeof call.args.prompt === 'string' ? call.args.prompt.trim() : '';
+      const aspectRatio = typeof call.args.aspectRatio === 'string' ? (call.args.aspectRatio as MediaAspectRatio) : undefined;
+      // Dedupe check against existing workspace assets before billing fal.ai
+      const existing = await listHubAssets({
+        workspaceId: ctx.workspaceId,
+        userId: ctx.userId,
+        kind,
+        limit: 50,
+      });
+      if (existing.ok) {
+        const match = existing.assets.find(
+          (a) =>
+            (a.prompt ?? '').trim().toLowerCase() === prompt.toLowerCase() &&
+            (!aspectRatio || a.aspectRatio === aspectRatio)
+        );
+        if (match) {
+          return { ok: true, data: { ...match, assetId: match.id, reusedExisting: true } };
+        }
+      }
+
       const outcome = await generateCreativeMedia({
-        kind: (call.args.kind === 'video' ? 'video' : 'image') as MediaKind,
-        prompt: typeof call.args.prompt === 'string' ? call.args.prompt : '',
-        ...(typeof call.args.aspectRatio === 'string' ? { aspectRatio: call.args.aspectRatio as MediaAspectRatio } : {}),
+        kind,
+        prompt,
+        ...(aspectRatio ? { aspectRatio } : {}),
         ...(typeof call.args.quality === 'string' ? { quality: call.args.quality as MediaQuality } : {}),
         ...(typeof call.args.source === 'string' ? { source: call.args.source as MediaSource } : {}),
         ...(typeof call.args.sourceImageUrl === 'string' ? { sourceImageUrl: call.args.sourceImageUrl } : {}),
@@ -79,7 +116,27 @@ export class DomainLimbExecutor implements LimbExecutor {
       if (!outcome.ok) {
         return { ok: false, code: outcome.code, message: outcome.message };
       }
-      return { ok: true, data: outcome.asset as unknown as Record<string, unknown> };
+      const strArr = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : undefined);
+      const saved = await saveHubAsset({
+        workspaceId: ctx.workspaceId,
+        userId: ctx.userId,
+        ...(ctx.goalId ? { goalId: ctx.goalId } : {}),
+        asset: outcome.asset,
+        ...(typeof call.args.title === 'string' ? { title: call.args.title } : {}),
+        ...(typeof call.args.description === 'string' ? { description: call.args.description } : {}),
+        tags: strArr(call.args.tags),
+        ...(typeof call.args.visualStyle === 'string' ? { visualStyle: call.args.visualStyle } : {}),
+        brandElements: strArr(call.args.brandElements),
+        useCases: strArr(call.args.useCases),
+        ...(typeof call.args.parentAssetId === 'string' ? { parentAssetId: call.args.parentAssetId } : {}),
+      });
+      return {
+        ok: true,
+        data: {
+          ...(outcome.asset as unknown as Record<string, unknown>),
+          ...(saved ? { assetId: saved.id, persistedToAssetService: true } : { persistedToAssetService: false }),
+        },
+      };
     }
     if (call.verb.limb === 'ads') {
       if (typeof call.args.providerCampaignId === 'string' || typeof call.args.providerAdId === 'string') {

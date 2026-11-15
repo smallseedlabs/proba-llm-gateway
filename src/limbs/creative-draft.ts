@@ -283,7 +283,20 @@ export function checkCreativeDraft(raw: Record<string, unknown>, input: DraftChe
     };
   }
   const rationale = typeof raw.rationale === 'string' && raw.rationale.trim() ? raw.rationale.trim().slice(0, 1000) : undefined;
-  const videoUrlRaw = typeof raw.videoUrl === 'string' ? normalizeLandingPageUrl(raw.videoUrl.trim()) : undefined;
+  let videoUrlRaw: string | undefined;
+  if (raw.videoUrl !== undefined && typeof raw.videoUrl === 'string' && raw.videoUrl.trim()) {
+    const candidateVideo = normalizeLandingPageUrl(raw.videoUrl.trim());
+    const landingHost = new URL(userUrl).hostname.toLowerCase();
+    const candidateHost = candidateVideo ? new URL(candidateVideo).hostname.toLowerCase() : '';
+    if (!candidateVideo || (!isTrustedMediaHost(candidateVideo) && candidateHost !== landingHost)) {
+      return {
+        ok: false,
+        code: 'creative_invalid',
+        reason: 'videoUrl must be a generated/stock asset from creative.generate_media or hosted on the landing page domain',
+      };
+    }
+    videoUrlRaw = candidateVideo;
+  }
   const ALLOWED_CTA = new Set(['LEARN_MORE', 'SIGN_UP', 'SHOP_NOW', 'GET_QUOTE', 'DOWNLOAD']);
   const ctaType = typeof raw.ctaType === 'string' && ALLOWED_CTA.has(raw.ctaType)
     ? (raw.ctaType as CheckedDraft['ctaType'])
