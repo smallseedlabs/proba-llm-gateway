@@ -205,20 +205,34 @@ export function checkCreativeDraft(raw: Record<string, unknown>, input: DraftChe
     }
   }
 
+  const isTrustedMediaHost = (url: string): boolean => {
+    try {
+      const host = new URL(url).hostname.toLowerCase();
+      return (
+        host === 'fal.media' ||
+        host.endsWith('.fal.media') ||
+        host === 'fal.run' ||
+        host === 'images.pexels.com' ||
+        host === 'videos.pexels.com'
+      );
+    } catch {
+      return false;
+    }
+  };
   const allowedImages = (input.research.imageUrls ?? [])
     .map((u) => normalizeLandingPageUrl(u))
     .filter((u): u is string => Boolean(u));
   let imageUrl: string | undefined;
   if (raw.imageUrl !== undefined) {
     const candidate = typeof raw.imageUrl === 'string' && raw.imageUrl.trim() ? normalizeLandingPageUrl(raw.imageUrl) : undefined;
-    if (!candidate || !allowedImages.includes(candidate)) {
+    if (!candidate || (!allowedImages.includes(candidate) && !isTrustedMediaHost(candidate))) {
       return {
         ok: false,
         code: 'creative_invalid',
         reason:
           allowedImages.length > 0
-            ? `imageUrl must be a validated landing-page image from accepted research (${allowedImages.join(', ')})`
-            : 'no validated landing-page image is in the accepted research; omit imageUrl to draft a text post',
+            ? `imageUrl must be a validated landing-page image (${allowedImages.join(', ')}) or a generated/stock asset from creative.generate_media`
+            : 'imageUrl must be a generated/stock asset from creative.generate_media or omitted for a text post',
       };
     }
     imageUrl = candidate;

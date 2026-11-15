@@ -12,6 +12,7 @@ import { researchAcceptedNeed } from '../research/artifact.js';
 import { bindingFromCtx, executeGather, lookupCurrentArtifact, type ResearchRuntime } from '../research/gather.js';
 import { normalizeLandingPageUrl } from '../research/input.js';
 import { executeWebSearch } from '../research/web-search.js';
+import { generateCreativeMedia, type MediaAspectRatio, type MediaKind, type MediaQuality, type MediaSource } from '../media/provider.js';
 import type { ResearchArtifact } from '../types/research.js';
 
 export class DomainLimbExecutor implements LimbExecutor {
@@ -62,6 +63,23 @@ export class DomainLimbExecutor implements LimbExecutor {
       const query = typeof call.args.query === 'string' ? call.args.query : '';
       const maxResults = typeof call.args.maxResults === 'number' ? call.args.maxResults : 5;
       return executeWebSearch(query, maxResults);
+    }
+    if (call.verb.name === 'creative.generate_media') {
+      const outcome = await generateCreativeMedia({
+        kind: (call.args.kind === 'video' ? 'video' : 'image') as MediaKind,
+        prompt: typeof call.args.prompt === 'string' ? call.args.prompt : '',
+        ...(typeof call.args.aspectRatio === 'string' ? { aspectRatio: call.args.aspectRatio as MediaAspectRatio } : {}),
+        ...(typeof call.args.quality === 'string' ? { quality: call.args.quality as MediaQuality } : {}),
+        ...(typeof call.args.source === 'string' ? { source: call.args.source as MediaSource } : {}),
+        ...(typeof call.args.sourceImageUrl === 'string' ? { sourceImageUrl: call.args.sourceImageUrl } : {}),
+        ...(call.args.durationSeconds === 5 || call.args.durationSeconds === 10
+          ? { durationSeconds: call.args.durationSeconds }
+          : {}),
+      });
+      if (!outcome.ok) {
+        return { ok: false, code: outcome.code, message: outcome.message };
+      }
+      return { ok: true, data: outcome.asset as unknown as Record<string, unknown> };
     }
     if (call.verb.limb === 'ads') {
       if (typeof call.args.providerCampaignId === 'string' || typeof call.args.providerAdId === 'string') {

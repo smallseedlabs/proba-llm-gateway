@@ -117,6 +117,45 @@ export const VERB_CATALOG: readonly VerbDefinition[] = [
   }),
   verb({
     limb: 'creative',
+    verb: 'generate_media',
+    name: 'creative.generate_media',
+    description:
+      'Generate or fetch high-class ad images and short videos (via fal.ai FLUX / Kling or Pexels stock) and return a hosted HTTPS URL + assetId to use in creative.draft_post or campaign swaps. Use when the landing page has no strong visual or when creating video/visual variants for Meta or Reddit.',
+    parameters: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['kind', 'prompt'],
+      properties: {
+        kind: { type: 'string', enum: ['image', 'video'], description: 'Generate an image or a short ad video.' },
+        prompt: {
+          type: 'string',
+          minLength: 3,
+          maxLength: 1000,
+          description: 'Detailed visual prompt (or stock search keywords) describing subject, style, lighting, and composition.',
+        },
+        aspectRatio: {
+          type: 'string',
+          enum: ['1:1', '4:5', '9:16', '16:9'],
+          description: '1:1 or 4:5 for Feed, 9:16 for Reels/Stories, 16:9 for landscape.',
+        },
+        quality: { type: 'string', enum: ['fast', 'high'], description: 'fast (economical default) or high (studio quality).' },
+        source: { type: 'string', enum: ['auto', 'ai', 'stock'], description: 'auto prefers AI if configured, otherwise stock.' },
+        sourceImageUrl: {
+          type: 'string',
+          minLength: 1,
+          maxLength: 2048,
+          description: 'Optional image URL to animate into a video (image-to-video).',
+        },
+        durationSeconds: { type: 'number', enum: [5, 10], description: 'Video length in seconds (5 or 10).' },
+      },
+    },
+    risk: 'low',
+    sideEffecting: true,
+    requiresApproval: false,
+    allowlisted: true,
+  }),
+  verb({
+    limb: 'creative',
     verb: 'draft_post',
     name: 'creative.draft_post',
     description:
