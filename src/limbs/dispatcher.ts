@@ -159,9 +159,22 @@ export class DomainLimbExecutor implements LimbExecutor {
         };
       }
       if (source === 'ai' && this.research?.store) {
-        const artifact = await lookupCurrentArtifact(this.research.store, bindingFromCtx(ctx), undefined);
+        const pageUrl =
+          typeof ctx.domainState.landingPageUrl === 'string'
+            ? ctx.domainState.landingPageUrl
+            : typeof ctx.domainState.url === 'string'
+              ? ctx.domainState.url
+              : undefined;
+        const artifact = pageUrl
+          ? await lookupCurrentArtifact(this.research.store, bindingFromCtx(ctx), pageUrl)
+          : undefined;
         if (!artifact || artifact.status !== 'accepted' || !artifact.acceptedAt) {
-          return { ok: false, code: 'research_not_accepted', message: 'research artifact must be accepted before generating AI media' };
+          return {
+            ok: false,
+            code: 'research_not_accepted',
+            message:
+              'Research artifact is not accepted yet. Either use source:"stock" / landing-page assets, or finish research review before generating AI media.',
+          };
         }
       }
 
