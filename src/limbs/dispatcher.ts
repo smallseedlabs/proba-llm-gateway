@@ -13,7 +13,7 @@ import { bindingFromCtx, executeGather, lookupCurrentArtifact, type ResearchRunt
 import { normalizeLandingPageUrl } from '../research/input.js';
 import { executeWebSearch } from '../research/web-search.js';
 import { listHubAssets, saveHubAsset } from '../media/asset-store.js';
-import { generateCreativeMedia, type MediaAspectRatio, type MediaKind, type MediaQuality, type MediaSource } from '../media/provider.js';
+import { fetchWikimediaStock, generateCreativeMedia, type MediaAspectRatio, type MediaKind, type MediaQuality, type MediaSource } from '../media/provider.js';
 import type { ResearchArtifact } from '../types/research.js';
 
 export class DomainLimbExecutor implements LimbExecutor {
@@ -158,6 +158,7 @@ export class DomainLimbExecutor implements LimbExecutor {
           message: 'Per-run AI generation cap reached (1 fal.ai asset per run). Reuse an existing Studio asset or free stock.',
         };
       }
+      let researchAccepted = true;
       if (source === 'ai' && this.research?.store) {
         const pageUrl =
           typeof ctx.domainState.landingPageUrl === 'string'
@@ -169,27 +170,37 @@ export class DomainLimbExecutor implements LimbExecutor {
           ? await lookupCurrentArtifact(this.research.store, bindingFromCtx(ctx), pageUrl)
           : undefined;
         if (!artifact || artifact.status !== 'accepted' || !artifact.acceptedAt) {
-          return {
-            ok: false,
-            code: 'research_not_accepted',
-            message:
-              'Research artifact is not accepted yet. Either use source:"stock" / landing-page assets, or finish research review before generating AI media.',
-          };
+          researchAccepted = false;
         }
       }
 
-      const outcome = await generateCreativeMedia({
+      const effectiveSource: MediaSource = !researchAccepted ? 'stock' : source;
+      let outcome = await generateCreativeMedia({
         kind,
         prompt,
         ...(typeof call.args.searchQuery === 'string' ? { searchQuery: call.args.searchQuery } : {}),
         ...(aspectRatio ? { aspectRatio } : {}),
         ...(typeof call.args.quality === 'string' ? { quality: call.args.quality as MediaQuality } : {}),
-        source,
+        source: effectiveSource,
         ...(typeof call.args.sourceImageUrl === 'string' ? { sourceImageUrl: call.args.sourceImageUrl } : {}),
         ...(call.args.durationSeconds === 5 || call.args.durationSeconds === 10
           ? { durationSeconds: call.args.durationSeconds }
           : {}),
       });
+      if (!outcome.ok && outcome.code === 'media_unconfigured' && kind === 'image') {
+        const query = typeof call.args.searchQuery === 'string' && call.args.searchQuery.trim()
+          ? call.args.searchQuery.trim()
+          : prompt;
+        outcome = await fetchWikimediaStock(query, aspectRatio ?? '4:5');
+      }
+      if (!outcome.ok && !researchAccepted) {
+        return {
+          ok: false,
+          code: 'research_not_accepted',
+          message:
+            'Research artifact is not accepted yet and no free stock image matched. Do NOT retry creative.generate_media in this turn; proceed with creative.draft_post (text-first) or wait for research acceptance.',
+        };
+      }
       if (!outcome.ok) {
         return { ok: false, code: outcome.code, message: outcome.message };
       }

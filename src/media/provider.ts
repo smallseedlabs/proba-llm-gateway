@@ -345,3 +345,55 @@ export async function generateCreativeMedia(
       'No media provider configured. Set FAL_KEY (fal.ai FLUX + Kling) or PEXELS_API_KEY (free stock) to generate or fetch ad images/videos.',
   };
 }
+
+export async function fetchWikimediaStock(
+  queryText: string,
+  aspectRatio: MediaAspectRatio = '4:5',
+  fetchImpl: typeof fetch = fetch
+): Promise<MediaGenerateOutcome> {
+  const q = queryText.trim().slice(0, 120);
+  if (!q) return { ok: false, code: 'invalid_input', message: 'query is required' };
+  const apiUrl = `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrnamespace=6&gsrsearch=${encodeURIComponent(q)}&gsrlimit=6&prop=imageinfo&iiprop=url|mime|size&format=json`;
+  try {
+    const res = await fetchImpl(apiUrl, {
+      headers: { 'User-Agent': 'ProbaMediaAgent/1.0 (+https://smallseedlabs.com)' },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) {
+      return { ok: false, code: 'media_failed', message: `Wikimedia search failed (${res.status})` };
+    }
+    const body = (await res.json()) as {
+      query?: {
+        pages?: Record<
+          string,
+          { imageinfo?: Array<{ url?: string; mime?: string; width?: number; height?: number }> }
+        >;
+      };
+    };
+    const pages = Object.values(body.query?.pages ?? {});
+    for (const p of pages) {
+      const info = p.imageinfo?.[0];
+      if (!info?.url || !info.mime) continue;
+      if (!/^image\/(jpeg|jpg|png|webp)$/i.test(info.mime)) continue;
+      if ((info.width ?? 0) < 400 || (info.height ?? 0) < 300) continue;
+      return {
+        ok: true,
+        asset: {
+          assetId: `ast_${randomUUID()}`,
+          kind: 'image',
+          url: info.url,
+          mimeType: info.mime,
+          ...(info.width ? { width: info.width } : {}),
+          ...(info.height ? { height: info.height } : {}),
+          aspectRatio,
+          provider: 'pexels',
+          model: 'wikimedia-commons-stock',
+          prompt: queryText,
+        },
+      };
+    }
+    return { ok: false, code: 'media_failed', message: `No suitable Wikimedia stock image found for "${q}"` };
+  } catch (err) {
+    return { ok: false, code: 'media_failed', message: `Wikimedia search error: ${(err as Error).message}` };
+  }
+}
