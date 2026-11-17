@@ -75,10 +75,14 @@ export class HttpUrlResearchProvider implements ResearchProviderPort {
     const onOuter = () => controller.abort();
     query.signal?.addEventListener('abort', onOuter, { once: true });
     try {
+      const isSocialHost = /(^|\.)(instagram\.com|tiktok\.com|facebook\.com|fb\.com|threads\.net)$/i.test(url.hostname);
       const response = await this.fetchImpl(url.toString(), {
         method: 'GET',
         redirect: 'error',
-        headers: { accept: 'text/html,text/plain;q=0.9,*/*;q=0.1' },
+        headers: {
+          accept: 'text/html,text/plain;q=0.9,*/*;q=0.1',
+          ...(isSocialHost ? { 'user-agent': 'facebookexternalhit/1.1' } : {}),
+        },
         signal: controller.signal,
       });
       if (response.status >= 300 && response.status < 400) {
@@ -333,9 +337,25 @@ function innerText(html: string, tag: string): string {
   return html.slice(gt + 1, close.start);
 }
 
+function extractMetaTags(html: string): string {
+  const values: string[] = [];
+  const regex = /<meta\b[^>]+(?:property|name)=["'](og:title|og:description|description|og:site_name)["'][^>]+content=["']([^"']*)["'][^>]*>/gi;
+  for (const m of html.matchAll(regex)) {
+    const val = (m[2] ?? '')
+      .replace(/&quot;/g, '"')
+      .replace(/&#x27;|&#39;/g, "'")
+      .replace(/&#x2026;/g, '…')
+      .replace(/&amp;/g, '&')
+      .trim();
+    if (val && !values.includes(val)) values.push(val);
+  }
+  return values.join(' | ');
+}
+
 function untrustedExcerpt(html: string): string {
   const noScript = dropElementBodies(dropElementBodies(html, 'script'), 'style');
   const title = innerText(noScript, 'title');
-  const text = `${title} ${noScript.replace(/<[^>]+>/g, ' ')}`.replace(/\s+/g, ' ').trim();
+  const meta = extractMetaTags(noScript);
+  const text = `${title} ${meta} ${noScript.replace(/<[^>]+>/g, ' ')}`.replace(/\s+/g, ' ').trim();
   return text.slice(0, 2000);
 }
