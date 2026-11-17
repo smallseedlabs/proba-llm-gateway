@@ -622,6 +622,32 @@ async function dispatchTools(
       })
     );
     if ((decision.verb.limb === 'ads' || decision.verb.limb === 'research') && !mutationPreflight.allowed) {
+      const rawConnected = (request.userSuppliedInput as { connectedPlatforms?: unknown } | undefined)?.connectedPlatforms;
+      const multiPlatform = Array.isArray(rawConnected) && rawConnected.length > 1;
+      const platformOnlyBlock =
+        decision.verb.name === 'ads.create_campaign' &&
+        multiPlatform &&
+        mutationPreflight.needs.length > 0 &&
+        mutationPreflight.needs.every((n) => n.capability === 'ads.connection' || n.capability === 'ads.permissions');
+      if (platformOnlyBlock) {
+        const msg =
+          (mutationPreflight.needs[0]?.message ?? 'Platform connection unauthorized') +
+          ' — skip this platform for now and continue creating campaigns on the remaining connected platforms.';
+        toolTurn.state = 'failed';
+        record.toolTurns.push(toolTurn);
+        record.messages.push({
+          role: 'tool',
+          content: JSON.stringify({ ok: false, code: 'platform_connection_blocked', message: msg }),
+          toolCallId: call.id,
+        });
+        record.pendingApproval = undefined;
+        record.lastResume = undefined;
+        record.state = 'running';
+        record.snapshot = undefined;
+        request.resume = undefined;
+        await deps.persist(record);
+        continue;
+      }
       throw new PreflightBlockedError(
         mutationPreflight.needs[0]?.message ?? 'mutating Ads work is blocked; preflight is not spending approval',
         mutationPreflight.needs
