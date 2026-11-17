@@ -169,7 +169,7 @@ export class DomainLimbExecutor implements LimbExecutor {
         const artifact = pageUrl
           ? await lookupCurrentArtifact(this.research.store, bindingFromCtx(ctx), pageUrl)
           : undefined;
-        if (!artifact || artifact.status !== 'accepted' || !artifact.acceptedAt) {
+        if (!artifact || (artifact.status !== 'accepted' && artifact.status !== 'awaiting_acceptance')) {
           researchAccepted = false;
         }
       }
