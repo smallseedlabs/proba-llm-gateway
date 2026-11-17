@@ -346,54 +346,75 @@ export async function generateCreativeMedia(
   };
 }
 
+const WIKI_STOPWORDS = new Set([
+  'editorial', 'documentary', 'photo', 'photograph', 'vertical', 'horizontal', 'square',
+  'shot', 'over', 'the', 'shoulder', 'with', 'and', 'for', 'from', 'into', 'high',
+  'resolution', 'lighting', 'natural', 'minimal', 'modern', 'clean', 'aesthetic', 'ugc',
+  '4:5', '9:16', '1:1', '16:9', 'no', 'text', 'garbled', 'aspect', 'ratio',
+]);
+
+function extractStockKeywords(raw: string): string[] {
+  return raw
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter((w) => w.length >= 3 && !WIKI_STOPWORDS.has(w));
+}
+
 export async function fetchWikimediaStock(
   queryText: string,
   aspectRatio: MediaAspectRatio = '4:5',
   fetchImpl: typeof fetch = fetch
 ): Promise<MediaGenerateOutcome> {
-  const q = queryText.trim().slice(0, 120);
-  if (!q) return { ok: false, code: 'invalid_input', message: 'query is required' };
-  const apiUrl = `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrnamespace=6&gsrsearch=${encodeURIComponent(q)}&gsrlimit=6&prop=imageinfo&iiprop=url|mime|size&format=json`;
-  try {
-    const res = await fetchImpl(apiUrl, {
-      headers: { 'User-Agent': 'ProbaMediaAgent/1.0 (+https://smallseedlabs.com)' },
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!res.ok) {
-      return { ok: false, code: 'media_failed', message: `Wikimedia search failed (${res.status})` };
-    }
-    const body = (await res.json()) as {
-      query?: {
-        pages?: Record<
-          string,
-          { imageinfo?: Array<{ url?: string; mime?: string; width?: number; height?: number }> }
-        >;
+  const words = extractStockKeywords(queryText);
+  const attempts = [
+    words.slice(0, 3).join(' '),
+    words.slice(0, 2).join(' '),
+    words[0] || '',
+  ].filter((q, idx, arr) => q.length >= 2 && arr.indexOf(q) === idx);
+  if (attempts.length === 0) return { ok: false, code: 'invalid_input', message: 'query is required' };
+
+  for (const q of attempts) {
+    const apiUrl = `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrnamespace=6&gsrsearch=${encodeURIComponent(q)}&gsrlimit=8&prop=imageinfo&iiprop=url|mime|size&format=json`;
+    try {
+      const res = await fetchImpl(apiUrl, {
+        headers: { 'User-Agent': 'ProbaMediaAgent/1.0 (+https://smallseedlabs.com)' },
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!res.ok) continue;
+      const body = (await res.json()) as {
+        query?: {
+          pages?: Record<
+            string,
+            { imageinfo?: Array<{ url?: string; mime?: string; width?: number; height?: number }> }
+          >;
+        };
       };
-    };
-    const pages = Object.values(body.query?.pages ?? {});
-    for (const p of pages) {
-      const info = p.imageinfo?.[0];
-      if (!info?.url || !info.mime) continue;
-      if (!/^image\/(jpeg|jpg|png|webp)$/i.test(info.mime)) continue;
-      if ((info.width ?? 0) < 400 || (info.height ?? 0) < 300) continue;
-      return {
-        ok: true,
-        asset: {
-          assetId: `ast_${randomUUID()}`,
-          kind: 'image',
-          url: info.url,
-          mimeType: info.mime,
-          ...(info.width ? { width: info.width } : {}),
-          ...(info.height ? { height: info.height } : {}),
-          aspectRatio,
-          provider: 'pexels',
-          model: 'wikimedia-commons-stock',
-          prompt: queryText,
-        },
-      };
+      const pages = Object.values(body.query?.pages ?? {});
+      for (const p of pages) {
+        const info = p.imageinfo?.[0];
+        if (!info?.url || !info.mime) continue;
+        if (!/^image\/(jpeg|jpg|png|webp)$/i.test(info.mime)) continue;
+        if ((info.width ?? 0) < 400 || (info.height ?? 0) < 300) continue;
+        return {
+          ok: true,
+          asset: {
+            assetId: `ast_${randomUUID()}`,
+            kind: 'image',
+            url: info.url,
+            mimeType: info.mime,
+            ...(info.width ? { width: info.width } : {}),
+            ...(info.height ? { height: info.height } : {}),
+            aspectRatio,
+            provider: 'pexels',
+            model: 'wikimedia-commons-stock',
+            prompt: queryText,
+          },
+        };
+      }
+    } catch {
+      // try shorter keyword fallback
     }
-    return { ok: false, code: 'media_failed', message: `No suitable Wikimedia stock image found for "${q}"` };
-  } catch (err) {
-    return { ok: false, code: 'media_failed', message: `Wikimedia search error: ${(err as Error).message}` };
   }
+  return { ok: false, code: 'media_failed', message: `No suitable Wikimedia stock image found for "${attempts[0]}"` };
 }
