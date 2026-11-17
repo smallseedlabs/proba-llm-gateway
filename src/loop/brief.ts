@@ -53,14 +53,18 @@ export function runBriefText(request: HubRunRequest | undefined, facts: RunBrief
     '[run]',
     request ? `Step: ${request.stepType}.` : '',
     connected.length > 0
-      ? `Connected ad platforms in this workspace: ${connected.join(', ')}.`
+      ? `Connected ad platforms in this workspace: ${connected.join(', ')}.` +
+        (connected.length > 1
+          ? ` Launch on ALL connected platforms (${connected.join(' AND ')}) by calling ads.create_campaign separately for each platform.`
+          : '')
       : '',
     url
       ? `Landing page: ${url} (operator-supplied).`
       : 'Landing page: none supplied. The operator sets it on the goal; research.gather and ads.create_campaign need it.',
     creativeLine(request),
     'Defaults: do not ask the operator for success metric, platform, targeting or duration. Choose them yourself from the goal, page and research ' +
-      'and put them in the creative.draft_post plan card (plan + targeting, each with a "chose X because Y" reason); the operator can override any of it.',
+      'and put them in the creative.draft_post plan card (plan + targeting, each with a "chose X because Y" reason); the operator can override any of it. ' +
+      'When calling ads.create_campaign, match the goal/workspace cap currency (e.g. GBP, USD, EUR) from context rather than guessing USD.',
     'Metrics: come from the Hub analytics review (the analytics section of your context), not from a tool you call.',
     facts.review ? `[review]\n${facts.review}` : '',
     facts.review && facts.offeredTools.length > 0

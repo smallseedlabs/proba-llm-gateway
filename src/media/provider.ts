@@ -391,12 +391,21 @@ export async function fetchWikimediaStock(
         };
       };
       const pages = Object.values(body.query?.pages ?? {});
-      for (const p of pages) {
-        const info = p.imageinfo?.[0];
-        if (!info?.url || !info.mime) continue;
-        if (!/^image\/(jpeg|jpg|png|webp)$/i.test(info.mime)) continue;
-        if ((info.width ?? 0) < 400 || (info.height ?? 0) < 300) continue;
-        if (typeof info.size === 'number' && info.size > 8 * 1024 * 1024) continue;
+      const candidates = pages
+        .map((p) => p.imageinfo?.[0])
+        .filter((info): info is { url: string; mime: string; size?: number; width?: number; height?: number } => {
+          if (!info?.url || !info.mime) return false;
+          if (!/^image\/(jpeg|jpg|png|webp)$/i.test(info.mime)) return false;
+          if ((info.width ?? 0) < 400 || (info.height ?? 0) < 300) return false;
+          if (typeof info.size === 'number' && info.size > 8 * 1024 * 1024) return false;
+          if (/(fractal|julia|diagram|chart|graph|map|plot|logo|icon|coat_of_arms|flag|signature|equation|formula|schematic|vector)/i.test(info.url)) {
+            return false;
+          }
+          return true;
+        });
+      // Prefer real photographs (JPEG/WebP) over PNGs which are often diagrams.
+      const info = candidates.find((c) => /^image\/(jpeg|jpg|webp)$/i.test(c.mime)) ?? candidates[0];
+      if (info) {
         return {
           ok: true,
           asset: {

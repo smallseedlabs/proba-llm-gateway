@@ -226,7 +226,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayService
       maxRequestBytes: envInt(env, 'GATEWAY_MAX_REQUEST_BYTES', 262_144, 1024, 2_000_000),
       rateLimitMax: envInt(env, 'GATEWAY_RATE_LIMIT_MAX', 60, 1, 10_000),
       rateLimitWindowMs: envInt(env, 'GATEWAY_RATE_LIMIT_WINDOW_MS', 60_000, 1000, 3_600_000),
-      maxIterations: envInt(env, 'GATEWAY_MAX_ITERATIONS', 14, 1, 64),
+      maxIterations: envInt(env, 'GATEWAY_MAX_ITERATIONS', 18, 1, 64),
       maxLlmCalls: envInt(env, 'GATEWAY_MAX_LLM_CALLS', 14, 1, 64),
       maxToolCalls: envInt(env, 'GATEWAY_MAX_TOOL_CALLS', 16, 1, 256),
       maxPromptTokens: envOptionalInt(env, 'GATEWAY_MAX_PROMPT_TOKENS', 1, 10_000_000),
