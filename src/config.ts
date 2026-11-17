@@ -188,7 +188,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayService
     research: {
       httpFetchEnabled: envBool(env, 'RESEARCH_HTTP_FETCH', false),
       timeoutMs: envInt(env, 'RESEARCH_FETCH_TIMEOUT_MS', 5_000, 100, 30_000),
-      maxBytes: envInt(env, 'RESEARCH_FETCH_MAX_BYTES', 262_144, 1024, 2_000_000),
+      maxBytes: envInt(env, 'RESEARCH_FETCH_MAX_BYTES', 2_000_000, 1024, 2_000_000),
       storeDir: researchStoreDir,
     },
     analytics: {
