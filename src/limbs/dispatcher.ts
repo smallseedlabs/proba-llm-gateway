@@ -151,7 +151,7 @@ export class DomainLimbExecutor implements LimbExecutor {
       const source = typeof call.args.source === 'string' ? (call.args.source as MediaSource) : 'auto';
       const runKey = ctx.traceId;
       const aiCount = this.aiMediaByRun.get(runKey) ?? 0;
-      if (source === 'ai' && aiCount >= 1) {
+      if ((source === 'ai' || source === 'auto') && aiCount >= 1) {
         return {
           ok: false,
           code: 'ai_media_cap',
@@ -159,7 +159,7 @@ export class DomainLimbExecutor implements LimbExecutor {
         };
       }
       let researchAccepted = true;
-      if (source === 'ai' && this.research?.store) {
+      if ((source === 'ai' || source === 'auto') && this.research?.store) {
         const pageUrl =
           typeof ctx.domainState.landingPageUrl === 'string'
             ? ctx.domainState.landingPageUrl
