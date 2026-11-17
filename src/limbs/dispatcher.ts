@@ -187,7 +187,7 @@ export class DomainLimbExecutor implements LimbExecutor {
           ? { durationSeconds: call.args.durationSeconds }
           : {}),
       });
-      if (!outcome.ok && outcome.code === 'media_unconfigured' && kind === 'image') {
+      if (!outcome.ok && (outcome.code === 'media_unconfigured' || outcome.code === 'media_failed') && kind === 'image') {
         const query = typeof call.args.searchQuery === 'string' && call.args.searchQuery.trim()
           ? call.args.searchQuery.trim()
           : prompt;

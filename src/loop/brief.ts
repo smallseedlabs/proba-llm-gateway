@@ -38,7 +38,7 @@ function creativeLine(request: HubRunRequest | undefined): string {
   }
   return (
     'Ad creative: none saved yet. Draft it with creative.draft_post from the goal, the operator page and the accepted research; ' +
-    'propose plans for connected platforms (Reddit and/or Meta Facebook/Instagram — draft visual-first creative with media/CTA for Meta). ' +
+    'propose plans for connected platforms (when both Meta Facebook/Instagram and Reddit are connected, or when running via managed accounts, draft a visual-first creative with an image from creative.generate_media and target BOTH Meta and Reddit). ' +
     'The operator approves or edits the draft card, which saves it on the goal (goals.approved_creative). ads.create_campaign is blocked until approved creative exists.'
   );
 }

@@ -213,7 +213,8 @@ export function checkCreativeDraft(raw: Record<string, unknown>, input: DraftChe
         host.endsWith('.fal.media') ||
         host === 'fal.run' ||
         host === 'images.pexels.com' ||
-        host === 'videos.pexels.com'
+        host === 'videos.pexels.com' ||
+        host === 'upload.wikimedia.org'
       );
     } catch {
       return false;

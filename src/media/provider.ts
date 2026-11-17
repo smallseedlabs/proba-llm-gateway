@@ -349,7 +349,7 @@ export async function generateCreativeMedia(
 const WIKI_STOPWORDS = new Set([
   'editorial', 'documentary', 'photo', 'photograph', 'vertical', 'horizontal', 'square',
   'shot', 'over', 'the', 'shoulder', 'with', 'and', 'for', 'from', 'into', 'high',
-  'resolution', 'lighting', 'natural', 'minimal', 'modern', 'clean', 'aesthetic', 'ugc',
+  'resolution', 'lighting', 'natural', 'minimal', 'minimalist', 'modern', 'clean', 'aesthetic', 'ugc', 'photography',
   '4:5', '9:16', '1:1', '16:9', 'no', 'text', 'garbled', 'aspect', 'ratio',
 ]);
 
@@ -386,7 +386,7 @@ export async function fetchWikimediaStock(
         query?: {
           pages?: Record<
             string,
-            { imageinfo?: Array<{ url?: string; mime?: string; width?: number; height?: number }> }
+            { imageinfo?: Array<{ url?: string; mime?: string; size?: number; width?: number; height?: number }> }
           >;
         };
       };
@@ -396,6 +396,7 @@ export async function fetchWikimediaStock(
         if (!info?.url || !info.mime) continue;
         if (!/^image\/(jpeg|jpg|png|webp)$/i.test(info.mime)) continue;
         if ((info.width ?? 0) < 400 || (info.height ?? 0) < 300) continue;
+        if (typeof info.size === 'number' && info.size > 8 * 1024 * 1024) continue;
         return {
           ok: true,
           asset: {

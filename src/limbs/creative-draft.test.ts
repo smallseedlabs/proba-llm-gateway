@@ -140,4 +140,16 @@ describe('plan card sections (targeting + defaults)', () => {
     expect(checkCreativeDraft({ ...ok, plan: { successMetric: 'vibes' } }, base).ok).toBe(false);
     expect(checkCreativeDraft({ ...ok, targeting: { communities: Array.from({ length: 26 }, (_, i) => `sub${i}x`) } }, base).ok).toBe(false);
   });
+
+  it('accepts upload.wikimedia.org stock URLs for visual Meta creatives', () => {
+    const res = checkCreativeDraft(
+      {
+        ...ok,
+        imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/a/ab/Studio.jpg',
+        plan: { successMetric: 'clicks', platform: 'meta' },
+      },
+      base
+    );
+    expect(res.ok).toBe(true);
+  });
 });
