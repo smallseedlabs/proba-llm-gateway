@@ -188,6 +188,13 @@ export class DomainLimbExecutor implements LimbExecutor {
           : {}),
       });
       if (!outcome.ok && (outcome.code === 'media_unconfigured' || outcome.code === 'media_failed') && kind === 'image') {
+        console.warn('[creative.generate_media] falling back to Wikimedia stock:', {
+          requestedSource: source,
+          effectiveSource,
+          researchAccepted,
+          code: outcome.code,
+          message: outcome.message,
+        });
         const query = typeof call.args.searchQuery === 'string' && call.args.searchQuery.trim()
           ? call.args.searchQuery.trim()
           : prompt;
