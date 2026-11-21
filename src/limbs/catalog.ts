@@ -258,8 +258,8 @@ export const VERB_CATALOG: readonly VerbDefinition[] = [
         },
         ctaType: {
           type: 'string',
-          enum: ['LEARN_MORE', 'SIGN_UP', 'SHOP_NOW', 'GET_QUOTE', 'DOWNLOAD'],
-          description: 'Call-to-action button for visual/Meta ads (default LEARN_MORE).',
+          enum: ['LEARN_MORE', 'WATCH_NOW', 'VIEW_MORE', 'SIGN_UP', 'SHOP_NOW', 'GET_QUOTE', 'DOWNLOAD', 'SUBSCRIBE', 'APPLY_NOW'],
+          description: 'Call-to-action button for visual/Meta/Reddit ads (default LEARN_MORE).',
         },
         visualBrief: {
           type: 'string',
@@ -326,7 +326,7 @@ export const VERB_CATALOG: readonly VerbDefinition[] = [
         },
         ctaType: {
           type: 'string',
-          enum: ['LEARN_MORE', 'SIGN_UP', 'SHOP_NOW', 'GET_QUOTE', 'DOWNLOAD'],
+          enum: ['LEARN_MORE', 'WATCH_NOW', 'VIEW_MORE', 'SIGN_UP', 'SHOP_NOW', 'GET_QUOTE', 'DOWNLOAD', 'SUBSCRIBE', 'APPLY_NOW'],
           description: 'Call-to-action button matching what the landing page offers.',
         },
       },
