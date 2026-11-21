@@ -62,8 +62,8 @@ export interface CheckedDraft {
   imageUrl?: string;
   /** Optional HTTPS video URL for Meta/Reddit video ads. */
   videoUrl?: string;
-  /** Call-to-action button for visual/Meta ads. */
-  ctaType?: 'LEARN_MORE' | 'SIGN_UP' | 'SHOP_NOW' | 'GET_QUOTE' | 'DOWNLOAD';
+  /** Call-to-action button for visual/Meta/Reddit ads. */
+  ctaType?: 'LEARN_MORE' | 'WATCH_NOW' | 'VIEW_MORE' | 'SIGN_UP' | 'SHOP_NOW' | 'GET_QUOTE' | 'DOWNLOAD' | 'SUBSCRIBE' | 'APPLY_NOW';
   /** Short creative art-direction note describing the visual composition. */
   visualBrief?: string;
   claims: DraftClaim[];
@@ -298,7 +298,7 @@ export function checkCreativeDraft(raw: Record<string, unknown>, input: DraftChe
     }
     videoUrlRaw = candidateVideo;
   }
-  const ALLOWED_CTA = new Set(['LEARN_MORE', 'SIGN_UP', 'SHOP_NOW', 'GET_QUOTE', 'DOWNLOAD']);
+  const ALLOWED_CTA = new Set(['LEARN_MORE', 'WATCH_NOW', 'VIEW_MORE', 'SIGN_UP', 'SHOP_NOW', 'GET_QUOTE', 'DOWNLOAD', 'SUBSCRIBE', 'APPLY_NOW']);
   const ctaType = typeof raw.ctaType === 'string' && ALLOWED_CTA.has(raw.ctaType)
     ? (raw.ctaType as CheckedDraft['ctaType'])
     : undefined;

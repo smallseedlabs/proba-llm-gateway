@@ -30,7 +30,10 @@ export function isOwnSiteUrl(candidateUrl: string, landingPageUrl: string): bool
 }
 
 export function resolvePageUrl(raw: string, baseUrl: string): string | undefined {
-  const value = raw.trim().replace(/^['"]|['"]$/g, '');
+  const value = raw
+    .trim()
+    .replace(/^['"]|['"]$/g, '')
+    .replace(/&amp;|&#0*38;|&#x0*26;/gi, '&');
   if (!value || value.startsWith('data:') || value.startsWith('javascript:')) return undefined;
   try {
     const url = new URL(value, baseUrl);

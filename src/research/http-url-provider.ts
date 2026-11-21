@@ -210,7 +210,16 @@ export class HttpUrlResearchProvider implements ResearchProviderPort {
   private async collectPageImages(landingPageUrl: string, html: string, signal: AbortSignal): Promise<ResearchSource[]> {
     const sources: ResearchSource[] = [];
     for (const candidate of extractImageCandidates(html, landingPageUrl)) {
-      if (!isOwnSiteUrl(candidate.url, landingPageUrl)) continue;
+      const isSocialMetaCdn = (() => {
+        if (candidate.kind !== 'og:image' && candidate.kind !== 'twitter:image') return false;
+        try {
+          const h = new URL(candidate.url).hostname.toLowerCase();
+          return /(^|\.)(cdninstagram\.com|fbcdn\.net|tiktokcdn\.com|licdn\.com|twimg\.com)$/.test(h);
+        } catch {
+          return false;
+        }
+      })();
+      if (!isOwnSiteUrl(candidate.url, landingPageUrl) && !isSocialMetaCdn) continue;
       const fetched = await this.fetchPublic(candidate.url, signal, 'image/*,*/*;q=0.1', this.imageMaxBytes);
       if (!fetched.ok) continue;
       const header = (fetched.contentType ?? '').split(';')[0]!.trim().toLowerCase();

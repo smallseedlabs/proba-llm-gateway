@@ -65,7 +65,11 @@ export function runBriefText(request: HubRunRequest | undefined, facts: RunBrief
     'Defaults: do not ask the operator for success metric, platform, targeting or duration. Choose them yourself from the goal, page and research ' +
       'and put them in the creative.draft_post plan card (plan + targeting, each with a "chose X because Y" reason); the operator can override any of it. ' +
       'Act decisively from the submitted URL (even for social links or Reels): generate visuals with creative.generate_media and pop out a creative.draft_post decision card with your recommended creative, audience, and plan instead of stopping to ask clarifying questions. ' +
-      'When the URL is an Instagram Reel or social video, explicitly state in the copy and rationale that this promotes the Instagram Reel to drive views and outbound clicks, attach the generated imageUrl (avoiding text-only posts), and include a clear Watch/Learn More CTA. ' +
+      'When the URL is an Instagram Reel or social video, explicitly state in the copy and rationale that this promotes the Instagram Reel to drive views and outbound clicks, attach the Reel image (preferring the og:image / img-* source from research.gather before calling creative.generate_media to avoid wasting credits), and pick an appropriate ctaType (e.g. WATCH_NOW or LEARN_MORE). ' +
+      'General creative judgment (choose format, media, and CTA from the goal rather than relying on defaults): ' +
+      'use research img-* sources first when relevant and only call creative.generate_media if research returned no usable image; ' +
+      'match ctaType to intent (WATCH_NOW/LEARN_MORE for Reels/content, SIGN_UP/GET_QUOTE for SaaS/lead-gen, SHOP_NOW for ecommerce); ' +
+      'when promoting external links on social feeds, make the offer and destination clear in both headline/body and ctaType. ' +
       'When calling ads.create_campaign, match the goal/workspace cap currency (e.g. GBP, USD, EUR) from context rather than guessing USD.',
     'Metrics: come from the Hub analytics review (the analytics section of your context), not from a tool you call.',
     facts.review ? `[review]\n${facts.review}` : '',
