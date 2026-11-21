@@ -15,12 +15,16 @@ import { executeWebSearch } from '../research/web-search.js';
 import { listHubAssets, saveHubAsset } from '../media/asset-store.js';
 import { fetchWikimediaStock, generateCreativeMedia, type MediaAspectRatio, type MediaKind, type MediaQuality, type MediaSource } from '../media/provider.js';
 import type { ResearchArtifact } from '../types/research.js';
+import { checkArtifact } from '../checker/index.js';
+import { evaluateSpendGate, type PaidActionJustification } from '../spend-gate/index.js';
+import { GoalCostLedger } from '../usage/goal-cost-cap.js';
 import { evaluateCampaignPlan, validateAgainstPlannerBounds, type PlannerBoundsPlan } from './planner-bounds.js';
 
 export class DomainLimbExecutor implements LimbExecutor {
   readonly name = 'domain';
   private readonly aiMediaByRun = new Map<string, number>();
   private readonly gatheredUrlByRun = new Map<string, string>();
+  private readonly goalCostLedger = new GoalCostLedger();
 
   constructor(
     private readonly ads: AdsDomainPort,
@@ -35,6 +39,16 @@ export class DomainLimbExecutor implements LimbExecutor {
       return attachUserPage(call, ctx);
     }
     if (call.verb.name === 'creative.draft_post') {
+      const verdict = await checkArtifact({
+        artifactKind: 'creative_copy',
+        ...(typeof ctx.domainState.landingPageUrl === 'string'
+          ? { userLandingPageUrl: ctx.domainState.landingPageUrl }
+          : {}),
+        payload: call.args,
+      });
+      if (!verdict.approved) {
+        return { ok: false, code: 'guardrail_rejected', message: verdict.reason };
+      }
       // Hub writes goals.approved_creative when the operator approves (or edits) the draft card; the
       // gateway stores nothing. The saved copy reaches later calls as userSuppliedInput.creative.
       return {
@@ -181,6 +195,30 @@ export class DomainLimbExecutor implements LimbExecutor {
       }
 
       const effectiveSource: MediaSource = !researchAccepted ? 'stock' : source;
+      const estimatedCostUsd = kind === 'video' ? 0.25 : 0.04;
+      const goalKey = ctx.goalId ?? ctx.traceId;
+      if (effectiveSource !== 'stock') {
+        const capCheck = this.goalCostLedger.canSpend(goalKey, estimatedCostUsd);
+        if (!capCheck.allowed) {
+          return { ok: false, code: capCheck.code, message: capCheck.reason };
+        }
+        const gate = evaluateSpendGate({
+          goalId: goalKey,
+          actionType: 'media_generate',
+          estimatedCostUsd,
+          justification:
+            (call.args.justification as PaidActionJustification | undefined) ??
+            (source === 'ai' ? 'user_requested' : 'no_usable_site_image'),
+          evidence:
+            typeof call.args.evidence === 'string' && call.args.evidence.trim().length > 0
+              ? call.args.evidence
+              : `source=${source}; existingAssets=${existing.ok ? existing.assets.length : 0}`,
+          hasUsableExistingImage: existing.ok && existing.assets.some((a) => a.kind === 'image'),
+        });
+        if (!gate.allowed) {
+          return { ok: false, code: gate.code, message: gate.reason };
+        }
+      }
       let outcome = await generateCreativeMedia({
         kind,
         prompt,
@@ -219,6 +257,7 @@ export class DomainLimbExecutor implements LimbExecutor {
       }
       if (outcome.asset.provider === 'fal') {
         this.aiMediaByRun.set(runKey, aiCount + 1);
+        this.goalCostLedger.recordSpend(goalKey, estimatedCostUsd);
       }
       const strArr = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : undefined);
       const saved = await saveHubAsset({
@@ -265,6 +304,28 @@ export class DomainLimbExecutor implements LimbExecutor {
           const boundsCheck = validateAgainstPlannerBounds(call.args, lastPlan);
           if (!boundsCheck.ok) {
             return boundsCheck;
+          }
+        }
+        if (call.args.creative && typeof call.args.creative === 'object' && !Array.isArray(call.args.creative)) {
+          const verdict = await checkArtifact({
+            artifactKind: 'creative_copy',
+            ...(typeof ctx.domainState.landingPageUrl === 'string'
+              ? { userLandingPageUrl: ctx.domainState.landingPageUrl }
+              : {}),
+            ...(lastPlan
+              ? {
+                  plannerBounds: {
+                    dailyBudget: lastPlan.dailyBudget,
+                    totalBudget: lastPlan.totalBudget,
+                    platforms: lastPlan.platforms,
+                    countries: lastPlan.countries,
+                  },
+                }
+              : {}),
+            payload: call.args.creative as Record<string, unknown>,
+          });
+          if (!verdict.approved) {
+            return { ok: false, code: 'guardrail_rejected', message: verdict.reason };
           }
         }
         const accepted = await this.acceptedResearch(call, ctx);
