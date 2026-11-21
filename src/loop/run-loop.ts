@@ -621,7 +621,7 @@ async function dispatchTools(
         details: graphAuditDetails(mutationPreflight),
       })
     );
-    if ((decision.verb.limb === 'ads' || decision.verb.limb === 'research') && !mutationPreflight.allowed) {
+    if (((decision.verb.limb === 'ads' && decision.verb.sideEffecting) || decision.verb.limb === 'research') && !mutationPreflight.allowed) {
       const rawConnected = (request.userSuppliedInput as { connectedPlatforms?: unknown } | undefined)?.connectedPlatforms;
       const multiPlatform = Array.isArray(rawConnected) && rawConnected.length > 1;
       const platformOnlyBlock =

@@ -147,7 +147,7 @@ export function evaluateActionPolicy(input: {
   last?: ActionOutcomeRecord;
   now: Date;
 }): ActionPolicyResult {
-  if (input.verb.limb !== 'ads') {
+  if (input.verb.limb !== 'ads' || (!input.verb.sideEffecting && !input.verb.requiresApproval)) {
     return result({
       mode: 'catalog',
       requiresHubApproval: input.verb.requiresApproval,
