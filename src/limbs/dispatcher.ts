@@ -15,6 +15,7 @@ import { executeWebSearch } from '../research/web-search.js';
 import { listHubAssets, saveHubAsset } from '../media/asset-store.js';
 import { fetchWikimediaStock, generateCreativeMedia, type MediaAspectRatio, type MediaKind, type MediaQuality, type MediaSource } from '../media/provider.js';
 import type { ResearchArtifact } from '../types/research.js';
+import { evaluateCampaignPlan, validateAgainstPlannerBounds, type PlannerBoundsPlan } from './planner-bounds.js';
 
 export class DomainLimbExecutor implements LimbExecutor {
   readonly name = 'domain';
@@ -241,6 +242,14 @@ export class DomainLimbExecutor implements LimbExecutor {
         },
       };
     }
+    if (call.verb.name === 'ads.plan') {
+      const planned = evaluateCampaignPlan(call.args);
+      if (!planned.ok) {
+        return { ok: false, code: planned.code, message: planned.message };
+      }
+      ctx.domainState.lastPlannerResult = planned.plan;
+      return { ok: true, data: planned.plan };
+    }
     if (call.verb.limb === 'ads') {
       if (typeof call.args.providerCampaignId === 'string' || typeof call.args.providerAdId === 'string') {
         return {
@@ -251,6 +260,13 @@ export class DomainLimbExecutor implements LimbExecutor {
       }
       let args = call.args;
       if (call.verb.name === 'ads.create_campaign') {
+        const lastPlan = ctx.domainState.lastPlannerResult as PlannerBoundsPlan | undefined;
+        if (lastPlan) {
+          const boundsCheck = validateAgainstPlannerBounds(call.args, lastPlan);
+          if (!boundsCheck.ok) {
+            return boundsCheck;
+          }
+        }
         const accepted = await this.acceptedResearch(call, ctx);
         if (!accepted.ok) return accepted;
         // Forward the Hub-accepted research binding plus a gateway attestation so

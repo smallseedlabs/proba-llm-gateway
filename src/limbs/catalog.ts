@@ -17,6 +17,35 @@ function verb(def: VerbDefinition): VerbDefinition {
 
 export const VERB_CATALOG: readonly VerbDefinition[] = [
   verb({
+    limb: 'ads',
+    verb: 'plan',
+    name: 'ads.plan',
+    description:
+      'Deterministic campaign planner (read-only). Computes bounded cell counts, daily budget, platform mix, objective, and clamps from budget, geo, and pixel verification.',
+    parameters: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['totalBudget', 'currency', 'platforms', 'geolocations'],
+      properties: {
+        totalBudget: { type: 'number', minimum: 1 },
+        currency: { type: 'string', minLength: 3, maxLength: 3 },
+        durationDays: { type: 'number', minimum: 3, maximum: 30 },
+        platforms: { type: 'array', minItems: 1, items: { type: 'string' } },
+        geolocations: { type: 'array', minItems: 1, items: { type: 'string' } },
+        hasPixel: { type: 'boolean' },
+        pixelVerified: { type: 'boolean' },
+        goalIntent: { type: 'string', enum: ['traffic', 'awareness', 'leads', 'sales'] },
+        creativeFormat: { type: 'string', enum: ['IMAGE', 'VIDEO', 'TEXT'] },
+        requestedCells: { type: 'number', minimum: 1 },
+        requestedDailyBudget: { type: 'number', minimum: 1 },
+      },
+    },
+    risk: 'low',
+    sideEffecting: false,
+    requiresApproval: false,
+    allowlisted: true,
+  }),
+  verb({
     limb: 'research',
     verb: 'gather',
     name: 'research.gather',

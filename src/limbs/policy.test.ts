@@ -54,6 +54,7 @@ describe('limb policy and domain executor', () => {
       code: 'unknown_verb',
     });
     expect(VERB_CATALOG.filter((v) => v.limb === 'ads' && v.allowlisted).map((v) => v.verb)).toEqual([
+      'plan',
       'create_campaign',
       'update_campaign',
       'pause_campaign',
