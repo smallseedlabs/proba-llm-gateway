@@ -19,6 +19,7 @@ import type { ResearchArtifact } from '../types/research.js';
 export class DomainLimbExecutor implements LimbExecutor {
   readonly name = 'domain';
   private readonly aiMediaByRun = new Map<string, number>();
+  private readonly gatheredUrlByRun = new Map<string, string>();
 
   constructor(
     private readonly ads: AdsDomainPort,
@@ -59,7 +60,11 @@ export class DomainLimbExecutor implements LimbExecutor {
       const lookupUrls = Array.isArray(call.args.lookupUrls)
         ? call.args.lookupUrls.filter((u): u is string => typeof u === 'string')
         : undefined;
-      return executeGather(this.research, call, ctx, url, lookupUrls);
+      const res = await executeGather(this.research, call, ctx, url, lookupUrls);
+      if (res.ok) {
+        this.gatheredUrlByRun.set(ctx.traceId, url);
+      }
+      return res;
     }
     if (call.verb.name === 'web.search') {
       const query = typeof call.args.query === 'string' ? call.args.query : '';
@@ -165,7 +170,7 @@ export class DomainLimbExecutor implements LimbExecutor {
             ? ctx.domainState.landingPageUrl
             : typeof ctx.domainState.url === 'string'
               ? ctx.domainState.url
-              : undefined;
+              : this.gatheredUrlByRun.get(runKey);
         const artifact = pageUrl
           ? await lookupCurrentArtifact(this.research.store, bindingFromCtx(ctx), pageUrl)
           : undefined;
