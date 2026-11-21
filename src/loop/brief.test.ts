@@ -49,4 +49,16 @@ describe('run brief', () => {
     expect(system?.content?.startsWith(`[self]\n${FALLBACK_SELF}`)).toBe(true);
     expect(system?.content).toContain('[run]');
   });
+
+  it('H0-06: requires operator-supplied landingPageUrl without defaulting and never forces multi-platform spend', () => {
+    const text = runBriefText(
+      testRunRequest({ userSuppliedInput: { connectedPlatforms: ['reddit', 'meta'] } }),
+      none
+    );
+    expect(text).toContain('Landing page: none supplied');
+    expect(text).toContain('never invent or default a URL');
+    expect(text).not.toContain('smallseedlabs.co.uk');
+    expect(text).not.toContain('target BOTH Meta and Reddit');
+    expect(text).not.toContain('Launch on ALL connected platforms');
+  });
 });

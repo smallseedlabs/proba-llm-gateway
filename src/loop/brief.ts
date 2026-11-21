@@ -38,7 +38,7 @@ function creativeLine(request: HubRunRequest | undefined): string {
   }
   return (
     'Ad creative: none saved yet. Draft it with creative.draft_post from the goal, the operator page and the accepted research; ' +
-    'propose plans for connected platforms (when both Meta Facebook/Instagram and Reddit are connected, or when running via managed accounts, draft a visual-first creative with an image from creative.generate_media and target BOTH Meta and Reddit). ' +
+    'propose a plan for the connected platform(s) matching the operator goal (only target multiple platforms if the operator requested multi-platform spend). ' +
     'The operator approves or edits the draft card, which saves it on the goal (goals.approved_creative). ads.create_campaign is blocked until approved creative exists.'
   );
 }
@@ -53,14 +53,11 @@ export function runBriefText(request: HubRunRequest | undefined, facts: RunBrief
     '[run]',
     request ? `Step: ${request.stepType}.` : '',
     connected.length > 0
-      ? `Connected ad platforms in this workspace: ${connected.join(', ')}.` +
-        (connected.length > 1
-          ? ` Launch on ALL connected platforms (${connected.join(' AND ')}) by calling ads.create_campaign separately for each platform.`
-          : '')
+      ? `Connected ad platforms in this workspace: ${connected.join(', ')}.`
       : '',
     url
       ? `Landing page: ${url} (operator-supplied).`
-      : 'Landing page: none supplied. The operator sets it on the goal; research.gather and ads.create_campaign need it.',
+      : 'Landing page: none supplied. Ask the operator for their landingPageUrl before calling research.gather or ads.create_campaign; never invent or default a URL.',
     creativeLine(request),
     'Defaults: do not ask the operator for success metric, platform, targeting or duration. Choose them yourself from the goal, page and research ' +
       'and put them in the creative.draft_post plan card (plan + targeting, each with a "chose X because Y" reason); the operator can override any of it. ' +
