@@ -18,7 +18,7 @@ describe('run brief', () => {
 
   it('reports connected platforms factually without scripting decisions', () => {
     const text = runBriefText(
-      testRunRequest({ userSuppliedInput: { connectedPlatforms: ['reddit', 'meta'] } }),
+      testRunRequest({ userSuppliedInput: { ...userLanding(), connectedPlatforms: ['reddit', 'meta'] } }),
       none
     );
     expect(text).toContain('Connected ad platforms in this workspace: reddit, meta.');
