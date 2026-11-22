@@ -12,7 +12,7 @@ import { researchAcceptedNeed } from '../research/artifact.js';
 import { bindingFromCtx, executeGather, lookupCurrentArtifact, type ResearchRuntime } from '../research/gather.js';
 import { normalizeLandingPageUrl } from '../research/input.js';
 import { executeWebSearch } from '../research/web-search.js';
-import { listHubAssets, saveHubAsset } from '../media/asset-store.js';
+import { listHubAssets, recordHubPaidAction, saveHubAsset } from '../media/asset-store.js';
 import { fetchWikimediaStock, generateCreativeMedia, type MediaAspectRatio, type MediaKind, type MediaQuality, type MediaSource } from '../media/provider.js';
 import type { ResearchArtifact } from '../types/research.js';
 import { checkArtifact } from '../checker/index.js';
@@ -258,6 +258,21 @@ export class DomainLimbExecutor implements LimbExecutor {
       if (outcome.asset.provider === 'fal') {
         this.aiMediaByRun.set(runKey, aiCount + 1);
         this.goalCostLedger.recordSpend(goalKey, estimatedCostUsd);
+        if (ctx.goalId) {
+          void recordHubPaidAction({
+            goalId: ctx.goalId,
+            userId: ctx.userId,
+            actionType: 'media_generate',
+            estimatedCostUsd,
+            justification:
+              (call.args.justification as PaidActionJustification | undefined) ??
+              (source === 'ai' ? 'user_requested' : 'no_usable_site_image'),
+            evidence:
+              typeof call.args.evidence === 'string' && call.args.evidence.trim().length > 0
+                ? call.args.evidence
+                : `provider=fal; model=${outcome.asset.model}; kind=${kind}`,
+          });
+        }
       }
       const strArr = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : undefined);
       const saved = await saveHubAsset({

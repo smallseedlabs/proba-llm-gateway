@@ -252,7 +252,7 @@ export const VERB_CATALOG: readonly VerbDefinition[] = [
     verb: 'draft_post',
     name: 'creative.draft_post',
     description:
-      'Propose a campaign plan & creative card (copy + visual media + CTA + optional targeting + plan defaults) for either reddit or meta (Facebook & Instagram) from the goal, the operator page and the ACCEPTED research. For reddit: write plain, specific post copy. For meta: craft visual-first creative (concise primary text, punchy headline <= 40 chars, imageUrl or videoUrl, ctaType, and visualBrief). When the goal or connected ad accounts include Meta or multiple platforms, propose plan.platform accordingly (and draft separate cards for reddit and meta when targeting both). Never invent URLs or ungrounded factual claims.',
+      'Propose a campaign plan & creative card (copy + visual media + CTA + optional targeting + plan defaults) for either reddit or meta (Facebook & Instagram) from the goal, the operator page and the ACCEPTED research. For reddit: write plain, specific post copy. For meta: craft visual-first creative (concise primary text <= 125 chars, punchy headline <= 40 chars, imageUrl or videoUrl, ctaType, and visualBrief). When the goal or connected ad accounts include Meta or multiple platforms, propose plan.platform accordingly (and draft separate cards for reddit and meta when targeting both). Never invent URLs or ungrounded factual claims.',
     parameters: {
       type: 'object',
       additionalProperties: false,

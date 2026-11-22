@@ -137,3 +137,34 @@ export async function saveHubAsset(
   const body = (await res.json()) as { asset?: StoredCreativeAsset };
   return body.asset ?? null;
 }
+
+export async function recordHubPaidAction(
+  input: {
+    goalId: string;
+    userId: string;
+    actionType: 'media_generate' | 'research_paid' | 'llm_call';
+    estimatedCostUsd: number;
+    justification: string;
+    evidence: string;
+  },
+  cfg: HubAssetStoreConfig = hubAssetConfigFromEnv()
+): Promise<boolean> {
+  if (!cfg.hubBaseUrl || !cfg.internalToken) {
+    return false;
+  }
+  const fetchImpl = cfg.fetchImpl ?? fetch;
+  try {
+    const res = await fetchImpl(`${cfg.hubBaseUrl}/v1/internal/paid-actions`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${cfg.internalToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(input),
+      signal: AbortSignal.timeout(5_000),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
