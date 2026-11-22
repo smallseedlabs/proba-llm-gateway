@@ -140,6 +140,7 @@ export async function saveHubAsset(
 
 export async function recordHubPaidAction(
   input: {
+    workspaceId?: string;
     goalId: string;
     userId: string;
     actionType: 'media_generate' | 'research_paid' | 'llm_call';
@@ -163,8 +164,12 @@ export async function recordHubPaidAction(
       body: JSON.stringify(input),
       signal: AbortSignal.timeout(5_000),
     });
+    if (!res.ok) {
+      console.warn('[paid-actions] Hub persistence returned non-ok status:', res.status);
+    }
     return res.ok;
-  } catch {
+  } catch (err) {
+    console.warn('[paid-actions] Hub persistence failed:', err instanceof Error ? err.message : String(err));
     return false;
   }
 }

@@ -260,6 +260,7 @@ export class DomainLimbExecutor implements LimbExecutor {
         this.goalCostLedger.recordSpend(goalKey, estimatedCostUsd);
         if (ctx.goalId) {
           void recordHubPaidAction({
+            workspaceId: ctx.workspaceId,
             goalId: ctx.goalId,
             userId: ctx.userId,
             actionType: 'media_generate',

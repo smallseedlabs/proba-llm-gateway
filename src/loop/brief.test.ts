@@ -52,7 +52,9 @@ describe('run brief', () => {
 
   it('H0-06: requires operator-supplied landingPageUrl without defaulting and never forces multi-platform spend', () => {
     const text = runBriefText(
-      testRunRequest({ userSuppliedInput: { connectedPlatforms: ['reddit', 'meta'] } }),
+      testRunRequest({
+        userSuppliedInput: { connectedPlatforms: ['reddit', 'meta'] } as never,
+      }),
       none
     );
     expect(text).toContain('Landing page: none supplied');

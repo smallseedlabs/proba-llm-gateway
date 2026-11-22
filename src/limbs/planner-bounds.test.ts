@@ -24,9 +24,7 @@ describe('H2-03 ads.plan and planner bounds enforcement', () => {
 
   it('refuses ads.create_campaign when dailyBudget or platform exceeds PlannerResult without calling ads.execute', async () => {
     const execute = vi.fn();
-    const dispatcher = new DomainLimbExecutor({
-      ads: { execute } as never,
-    });
+    const dispatcher = new DomainLimbExecutor({ execute } as never);
 
     const planVerb = VERB_CATALOG.find((v) => v.name === 'ads.plan')!;
     const createVerb = VERB_CATALOG.find((v) => v.name === 'ads.create_campaign')!;
@@ -51,6 +49,7 @@ describe('H2-03 ads.plan and planner bounds enforcement', () => {
 
     const planOut = await dispatcher.execute(
       {
+        callId: 'call-plan-1',
         verb: planVerb,
         args: {
           totalBudget: 100,
@@ -68,6 +67,7 @@ describe('H2-03 ads.plan and planner bounds enforcement', () => {
 
     const badBudget = await dispatcher.execute(
       {
+        callId: 'call-create-1',
         verb: createVerb,
         args: {
           name: 'Over Budget',
