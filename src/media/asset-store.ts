@@ -173,3 +173,28 @@ export async function recordHubPaidAction(
     return false;
   }
 }
+
+export async function fetchHubGoalCostTotal(
+  goalId: string,
+  cfg: HubAssetStoreConfig = hubAssetConfigFromEnv()
+): Promise<number | null> {
+  if (!cfg.hubBaseUrl || !cfg.internalToken) {
+    return null;
+  }
+  const fetchImpl = cfg.fetchImpl ?? fetch;
+  try {
+    const res = await fetchImpl(`${cfg.hubBaseUrl}/v1/internal/goals/${encodeURIComponent(goalId)}/costs`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${cfg.internalToken}`,
+        Accept: 'application/json',
+      },
+      signal: AbortSignal.timeout(3_000),
+    });
+    if (!res.ok) return null;
+    const body = (await res.json()) as { totalUsd?: unknown };
+    return typeof body?.totalUsd === 'number' && Number.isFinite(body.totalUsd) ? body.totalUsd : null;
+  } catch {
+    return null;
+  }
+}

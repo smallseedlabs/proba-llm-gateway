@@ -133,14 +133,24 @@ export function evaluateCampaignPlan(raw: Record<string, unknown>, maxDailyCap =
 
 export function validateAgainstPlannerBounds(
   args: Record<string, unknown>,
-  plan: PlannerBoundsPlan
+  plan: PlannerBoundsPlan,
+  priorDailyBudgetSum = 0
 ): { ok: true } | { ok: false; code: 'planner_bounds_exceeded'; message: string } {
-  if (typeof args.dailyBudget === 'number' && args.dailyBudget > plan.dailyBudget) {
-    return {
-      ok: false,
-      code: 'planner_bounds_exceeded',
-      message: `dailyBudget ${args.dailyBudget} exceeds planner bound ${plan.dailyBudget}`,
-    };
+  if (typeof args.dailyBudget === 'number') {
+    if (args.dailyBudget > plan.dailyBudget) {
+      return {
+        ok: false,
+        code: 'planner_bounds_exceeded',
+        message: `dailyBudget ${args.dailyBudget} exceeds planner bound ${plan.dailyBudget}`,
+      };
+    }
+    if (priorDailyBudgetSum + args.dailyBudget > plan.dailyBudget + 0.01) {
+      return {
+        ok: false,
+        code: 'planner_bounds_exceeded',
+        message: `cumulative cell dailyBudget (${Number((priorDailyBudgetSum + args.dailyBudget).toFixed(2))}) exceeds planner daily cap ${plan.dailyBudget}`,
+      };
+    }
   }
   if (typeof args.platform === 'string' && !plan.platforms.includes(args.platform)) {
     return {

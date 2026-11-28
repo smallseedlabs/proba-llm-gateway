@@ -51,6 +51,7 @@ import { creativeRulesFrom, NO_GUARDRAILS, verbMode } from '../guardrails/guardr
 import { gatewayAuditEvent, llmTurnAuditEvents } from './audit-events.js';
 import { blockedReplyOutputs, blockedReplyText } from './blocked-reply.js';
 import { RequestValidationError } from '../errors.js';
+import { recordHubPaidAction } from '../media/asset-store.js';
 
 export interface LoopBodyDeps {
   config: GatewayServiceConfig;
@@ -302,6 +303,17 @@ async function callLlm(
     turn.response = response;
     usage.recordLlmTurn(response);
     record.usage = usage.snapshot();
+    if (request.goalId && request.userId && typeof response.cost.estimate === 'number' && response.cost.estimate > 0) {
+      void recordHubPaidAction({
+        workspaceId: request.workspaceId,
+        goalId: request.goalId,
+        userId: request.userId,
+        actionType: 'llm_call',
+        estimatedCostUsd: response.cost.estimate,
+        justification: 'user_requested',
+        evidence: `model=${response.model}; provider=${response.provider}; step=${request.stepType}`,
+      });
+    }
     record.events.push(
       ...llmTurnAuditEvents(
         request,
@@ -986,6 +998,9 @@ export function snapshotOf(
     typeof record.domainState.createdCampaign === 'object'
       ? (record.domainState.createdCampaign as Record<string, unknown>)
       : undefined;
+  const createdCampaigns = Array.isArray(record.domainState.createdCampaigns)
+    ? (record.domainState.createdCampaigns as Array<Record<string, unknown>>)
+    : undefined;
   return {
     runId: record.runId,
     status,
@@ -998,7 +1013,12 @@ export function snapshotOf(
     ...(record.actionOutcome
       ? { actionOutcome: { ...record.actionOutcome } as Record<string, unknown> }
       : createdCampaign
-        ? { actionOutcome: { ...createdCampaign } }
+        ? {
+            actionOutcome: {
+              ...createdCampaign,
+              ...(createdCampaigns ? { createdCampaigns } : {}),
+            },
+          }
         : {}),
   };
 }

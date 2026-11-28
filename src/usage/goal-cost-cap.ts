@@ -2,8 +2,20 @@ export const DEFAULT_GOAL_WEEK_COST_CAP_USD = 6.5;
 
 export class GoalCostLedger {
   private readonly spentByGoal = new Map<string, number>();
+  private readonly hydratedGoals = new Set<string>();
 
   constructor(private readonly capUsd: number = DEFAULT_GOAL_WEEK_COST_CAP_USD) {}
+
+  isHydrated(goalId: string): boolean {
+    return this.hydratedGoals.has(goalId);
+  }
+
+  hydrate(goalId: string, persistedUsd: number): void {
+    if (this.hydratedGoals.has(goalId)) return;
+    this.hydratedGoals.add(goalId);
+    const current = this.getSpent(goalId);
+    this.spentByGoal.set(goalId, Number((current + Math.max(0, persistedUsd)).toFixed(4)));
+  }
 
   getSpent(goalId: string): number {
     return this.spentByGoal.get(goalId) ?? 0;

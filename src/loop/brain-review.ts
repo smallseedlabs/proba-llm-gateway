@@ -37,10 +37,50 @@ function boundsFromPayload(request: HubRunRequest): ReviewBoundsInput {
   return typeof b === 'object' && b !== null && !Array.isArray(b) ? (b as ReviewBoundsInput) : undefined;
 }
 
-function scopedSnapshots(request: HubRunRequest, packet: ContextPacket | undefined): CampaignMetricsSnapshot[] {
-  if (!packet) return [];
+function liveDeliverySnapshot(request: HubRunRequest): CampaignMetricsSnapshot[] {
+  const p = payloadOf(request);
+  const delivery =
+    typeof p.deliveryStatus === 'object' && p.deliveryStatus !== null && !Array.isArray(p.deliveryStatus)
+      ? (p.deliveryStatus as Record<string, unknown>)
+      : undefined;
+  const nm =
+    delivery && typeof delivery.nativeMetrics === 'object' && delivery.nativeMetrics !== null && !Array.isArray(delivery.nativeMetrics)
+      ? (delivery.nativeMetrics as Record<string, unknown>)
+      : undefined;
+  if (!nm) return [];
   const scope = analyticsScopeFromRequest(request);
-  return snapshotsFromPacket(packet).filter((s) => inScope(s, scope));
+  const platform = scope.platform ?? (typeof p.platform === 'string' ? p.platform : undefined);
+  const accountId = scope.accountId ?? (typeof p.accountId === 'string' ? p.accountId : 'connected');
+  const campaignId = scope.providerCampaignId ?? scope.probaCampaignId;
+  if (!platform || !campaignId) return [];
+  const numOrUnknown = (v: unknown): number | 'unknown' => (typeof v === 'number' && Number.isFinite(v) ? v : 'unknown');
+  const asOf = typeof delivery?.checkedAt === 'string' ? delivery.checkedAt : new Date().toISOString();
+  return [
+    {
+      kind: 'campaign_metrics',
+      workspaceId: request.workspaceId,
+      userId: request.userId,
+      platform,
+      accountId,
+      campaignId,
+      ...(scope.probaCampaignId ? { probaCampaignId: scope.probaCampaignId } : {}),
+      asOf,
+      ...(scope.currency ? { currency: scope.currency } : {}),
+      impressions: numOrUnknown(nm.impressions),
+      clicks: numOrUnknown(nm.clicks),
+      spend: numOrUnknown(nm.spend),
+      conversions: numOrUnknown(nm.conversions),
+      observationCount: 1,
+      sourceItemId: `live-delivery:${platform}:${campaignId}`,
+    },
+  ];
+}
+
+function scopedSnapshots(request: HubRunRequest, packet: ContextPacket | undefined): CampaignMetricsSnapshot[] {
+  const scope = analyticsScopeFromRequest(request);
+  const fromPacket = packet ? snapshotsFromPacket(packet).filter((s) => inScope(s, scope)) : [];
+  if (fromPacket.length > 0) return fromPacket;
+  return liveDeliverySnapshot(request);
 }
 
 const factsByRecord = new WeakMap<RunRecord, ReviewFacts>();
@@ -79,18 +119,32 @@ export function brainReviewBrief(request: HubRunRequest, facts: ReviewFacts): st
     typeof p.deliveryStatus === 'object' && p.deliveryStatus !== null && !Array.isArray(p.deliveryStatus)
       ? (p.deliveryStatus as Record<string, unknown>)
       : undefined;
+  const nativeMetrics =
+    delivery && typeof delivery.nativeMetrics === 'object' && delivery.nativeMetrics !== null
+      ? JSON.stringify(delivery.nativeMetrics).slice(0, 600)
+      : undefined;
   const deliveryLine =
     delivery && typeof delivery.label === 'string' && typeof delivery.summary === 'string'
       ? `Platform delivery status (${typeof p.platform === 'string' ? p.platform : 'provider'}): ${delivery.label} — ${delivery.summary}${
           Array.isArray(delivery.causes) && delivery.causes.length > 0 ? ` Causes: ${delivery.causes.join('; ')}.` : ''
-        }`
+        }${nativeMetrics ? ` Live provider metrics: ${nativeMetrics}.` : ''}`
       : undefined;
+  const peerCampaigns = Array.isArray(p.peerCampaigns) ? p.peerCampaigns : [];
+  const peerLine =
+    peerCampaigns.length > 0
+      ? `Sibling experiment cells under this goal: ${JSON.stringify(peerCampaigns).slice(0, 1500)}.`
+      : undefined;
+  const campaignLabel =
+    typeof p.campaignName === 'string' && p.campaignName.trim()
+      ? `${p.campaignName.trim()} (${facts.probaCampaignId ?? 'campaign'})`
+      : (facts.probaCampaignId ?? 'the goal campaign');
   return [
-    `Campaign review for ${facts.probaCampaignId ?? 'the goal campaign'}, started by Hub: ${trigger}${wake}.`,
+    `Campaign review for ${campaignLabel}, started by Hub: ${trigger}${wake}.`,
     plan ? `Approved plan (the success contract): ${plan}` : 'No approved plan is saved; judge against the goal.',
     ...(deliveryLine ? [deliveryLine] : []),
+    ...(peerLine ? [peerLine] : []),
     facts.hasAuditedMetrics
-      ? 'Audited metrics for this campaign are in the analytics section of your context. Use only those numbers.'
+      ? 'Audited metrics for this campaign are present in context / live provider telemetry. Use only those numbers.'
       : 'No audited metrics for this campaign are in context yet: say so, change nothing, and pick a sensible next check.',
     facts.currentDailyBudget !== undefined
       ? `Current daily budget: ${facts.currentDailyBudget}${facts.currency ? ` ${facts.currency}` : ''}.`

@@ -12,7 +12,7 @@ import { researchAcceptedNeed } from '../research/artifact.js';
 import { bindingFromCtx, executeGather, lookupCurrentArtifact, type ResearchRuntime } from '../research/gather.js';
 import { normalizeLandingPageUrl } from '../research/input.js';
 import { executeWebSearch } from '../research/web-search.js';
-import { listHubAssets, recordHubPaidAction, saveHubAsset } from '../media/asset-store.js';
+import { fetchHubGoalCostTotal, listHubAssets, recordHubPaidAction, saveHubAsset } from '../media/asset-store.js';
 import { fetchWikimediaStock, generateCreativeMedia, type MediaAspectRatio, type MediaKind, type MediaQuality, type MediaSource } from '../media/provider.js';
 import type { ResearchArtifact } from '../types/research.js';
 import { checkArtifact } from '../checker/index.js';
@@ -198,6 +198,12 @@ export class DomainLimbExecutor implements LimbExecutor {
       const estimatedCostUsd = kind === 'video' ? 0.25 : 0.04;
       const goalKey = ctx.goalId ?? ctx.traceId;
       if (effectiveSource !== 'stock') {
+        if (ctx.goalId && !this.goalCostLedger.isHydrated(goalKey)) {
+          const persisted = await fetchHubGoalCostTotal(ctx.goalId);
+          if (persisted !== null) {
+            this.goalCostLedger.hydrate(goalKey, persisted);
+          }
+        }
         const capCheck = this.goalCostLedger.canSpend(goalKey, estimatedCostUsd);
         if (!capCheck.allowed) {
           return { ok: false, code: capCheck.code, message: capCheck.reason };
@@ -317,7 +323,14 @@ export class DomainLimbExecutor implements LimbExecutor {
       if (call.verb.name === 'ads.create_campaign') {
         const lastPlan = ctx.domainState.lastPlannerResult as PlannerBoundsPlan | undefined;
         if (lastPlan) {
-          const boundsCheck = validateAgainstPlannerBounds(call.args, lastPlan);
+          const prevCreated = Array.isArray(ctx.domainState.createdCampaigns)
+            ? (ctx.domainState.createdCampaigns as Array<{ dailyBudget?: unknown }>)
+            : [];
+          const priorDailySum = prevCreated.reduce(
+            (sum, item) => sum + (typeof item.dailyBudget === 'number' ? item.dailyBudget : 0),
+            0
+          );
+          const boundsCheck = validateAgainstPlannerBounds(call.args, lastPlan, priorDailySum);
           if (!boundsCheck.ok) {
             return boundsCheck;
           }
@@ -383,10 +396,11 @@ export class DomainLimbExecutor implements LimbExecutor {
         if (result.data.mappings) ctx.domainState.providerMappings = result.data.mappings;
         if (call.verb.name === 'ads.create_campaign') {
           const firstMapping = result.data.mappings?.[0];
-          ctx.domainState.createdCampaign = {
+          const entry = {
             verb: 'ads.create_campaign',
             ok: true,
             probaCampaignId: result.data.probaCampaignId,
+            ...(typeof call.args.name === 'string' ? { name: call.args.name } : {}),
             platform: typeof call.args.platform === 'string' ? call.args.platform : (firstMapping?.provider ?? 'reddit'),
             ...(typeof call.args.dailyBudget === 'number' ? { dailyBudget: call.args.dailyBudget } : {}),
             ...(typeof call.args.currency === 'string' ? { currency: call.args.currency } : {}),
@@ -396,6 +410,14 @@ export class DomainLimbExecutor implements LimbExecutor {
             ...(typeof result.data.deliverableAd === 'boolean' ? { deliverableAd: result.data.deliverableAd } : {}),
             ...(result.data.providerLaunch ? { providerLaunch: result.data.providerLaunch } : {}),
           };
+          const createdList = Array.isArray(ctx.domainState.createdCampaigns)
+            ? (ctx.domainState.createdCampaigns as Array<Record<string, unknown>>)
+            : [];
+          if (!createdList.some((c) => c.probaCampaignId === entry.probaCampaignId)) {
+            createdList.push(entry);
+          }
+          ctx.domainState.createdCampaigns = createdList;
+          ctx.domainState.createdCampaign = entry;
         }
       }
       return result.ok ? { ok: true, data: result.data } : { ok: false, code: result.code, message: result.message };

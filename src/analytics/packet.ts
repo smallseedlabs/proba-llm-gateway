@@ -83,8 +83,8 @@ export function inScope(snapshot: CampaignMetricsSnapshot, scope: AnalyticsScope
   if (scope.providerCampaignId && snapshot.campaignId !== scope.providerCampaignId) return false;
   if (scope.probaCampaignId) {
     if (snapshot.probaCampaignId) return snapshot.probaCampaignId === scope.probaCampaignId;
-    // Packet used provider campaign id; Hub proba id must be compared only when present.
-    return snapshot.campaignId === scope.probaCampaignId;
+    // Packet used provider campaign id; when providerCampaignId already matched above, do not compare providerId against probaId.
+    if (!scope.providerCampaignId) return snapshot.campaignId === scope.probaCampaignId;
   }
   return true;
 }

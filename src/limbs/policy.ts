@@ -151,7 +151,10 @@ export class CatalogPolicyEngine implements PolicyEngine {
       if (creative.type === 'IMAGE' && !imageUrl) {
         return { allowed: false, code: 'user_input', reason: 'creative.mediaUrl must be a public https URL supplied by the operator' };
       }
-      const targeting = ctx.userSuppliedInput?.targeting;
+      const baseTargeting = ctx.userSuppliedInput?.targeting;
+      const callTargeting = isRecord(rawArgs.targeting) ? rawArgs.targeting : undefined;
+      const mergedTargeting =
+        baseTargeting || callTargeting ? { ...(baseTargeting ?? {}), ...(callTargeting ?? {}) } : undefined;
       return {
         allowed: true,
         verb,
@@ -159,7 +162,7 @@ export class CatalogPolicyEngine implements PolicyEngine {
           ...rawArgs,
           landingPageUrl: userUrl,
           creative: imageUrl ? { ...creative, mediaUrl: imageUrl } : { ...creative },
-          ...(targeting ? { targeting: { ...targeting } } : {}),
+          ...(mergedTargeting ? { targeting: mergedTargeting } : {}),
         },
       };
     }

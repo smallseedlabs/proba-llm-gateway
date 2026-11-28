@@ -358,6 +358,11 @@ export const VERB_CATALOG: readonly VerbDefinition[] = [
           enum: ['LEARN_MORE', 'WATCH_NOW', 'VIEW_MORE', 'SIGN_UP', 'SHOP_NOW', 'GET_QUOTE', 'DOWNLOAD', 'SUBSCRIBE', 'APPLY_NOW'],
           description: 'Call-to-action button matching what the landing page offers.',
         },
+        targeting: {
+          type: 'object',
+          description:
+            'Optional cell-specific audience targeting (geolocations ISO-2 codes, Meta interests / ageMin / ageMax, Reddit communities / keywords, and cell hypothesis). Merged over goal approved_targeting.',
+        },
       },
     },
     risk: 'high',
